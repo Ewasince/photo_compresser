@@ -12,6 +12,10 @@ from PIL import Image, ImageOps
 import logging
 from save_functions import save_jpeg, save_webp, save_avif
 
+from pillow_heif import register_heif_opener
+
+register_heif_opener()
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -133,7 +137,7 @@ class ImageCompressor:
                     return self._save_basic(img, output_path)
                 
         except Exception as e:
-            logger.error(f"Error compressing {input_path}: {e}")
+            logger.exception(f"Error compressing {input_path}: {e}")
             return False
     
     def _save_jpeg_custom(self, img: Image.Image, input_path: Path, output_path: Path) -> bool:
