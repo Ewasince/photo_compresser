@@ -57,7 +57,7 @@ class CompressionWorker(QThread):
             
             # Save compression settings
             if image_pairs:
-                save_compression_settings(self.output_dir, self.compression_settings, image_pairs)
+                save_compression_settings(self.output_dir, self.compression_settings, image_pairs, stats)
             
             self.status_updated.emit(f"Compression completed! {compressed_files}/{total_files} files compressed.")
             self.compression_finished.emit(stats)

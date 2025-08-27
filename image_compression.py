@@ -409,7 +409,7 @@ def create_image_pairs(compressed_dir: Path, original_dir: Path = None) -> List[
     return image_pairs
 
 
-def save_compression_settings(output_dir: Path, compression_settings: dict, image_pairs: List[Tuple[Path, Path]]):
+def save_compression_settings(output_dir: Path, compression_settings: dict, image_pairs: List[Tuple[Path, Path]], stats: dict):
     """
     Save compression settings and image pairs to a JSON file.
     
@@ -433,7 +433,8 @@ def save_compression_settings(output_dir: Path, compression_settings: dict, imag
             }
             for original_path, compressed_path in image_pairs
         ],
-        'total_pairs': len(image_pairs)
+        'total_pairs': len(image_pairs),
+        'stats': stats,
     }
     
     settings_file = output_dir / 'compression_settings.json'
