@@ -6,6 +6,7 @@ Main application for compressing images with configurable parameters.
 
 import sys
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
@@ -288,7 +289,7 @@ class MainWindow(QMainWindow):
             return
         
         # Create output directory
-        output_name = f"{self.input_directory.name}_compressed"
+        output_name = f"{self.input_directory.name}_compressed_{datetime.now().strftime('%Y.%m.%d %H%M%S')}"
         self.output_directory = self.input_directory.parent / output_name
         
         # Get compression settings
