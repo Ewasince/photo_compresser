@@ -17,7 +17,7 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QIcon
 
 # Import our modules
-from image_compression import ImageCompressor, create_image_pairs
+from image_compression import ImageCompressor, create_image_pairs, save_compression_settings, load_compression_settings
 from image_comparison import ImagePair, show_comparison_window
 
 
@@ -29,11 +29,12 @@ class CompressionWorker(QThread):
     compression_finished = pyqtSignal(dict)  # stats
     error_occurred = pyqtSignal(str)
     
-    def __init__(self, compressor: ImageCompressor, input_dir: Path, output_dir: Path):
+    def __init__(self, compressor: ImageCompressor, input_dir: Path, output_dir: Path, compression_settings: dict):
         super().__init__()
         self.compressor = compressor
         self.input_dir = input_dir
         self.output_dir = output_dir
+        self.compression_settings = compression_settings
     
     def run(self):
         """Run the compression process."""
@@ -49,6 +50,13 @@ class CompressionWorker(QThread):
             stats = self.compressor.get_compression_stats(self.input_dir, self.output_dir)
             stats['total_files'] = total_files
             stats['compressed_files'] = compressed_files
+            
+            # Create image pairs for settings file
+            image_pairs = create_image_pairs(self.output_dir, self.input_dir)
+            
+            # Save compression settings
+            if image_pairs:
+                save_compression_settings(self.output_dir, self.compression_settings, image_pairs)
             
             self.status_updated.emit(f"Compression completed! {compressed_files}/{total_files} files compressed.")
             self.compression_finished.emit(stats)
@@ -170,10 +178,18 @@ class MainWindow(QMainWindow):
         self.max_smallest_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
         settings_layout.addWidget(self.max_smallest_spinbox, 2, 1)
         
+        # Output format
+        settings_layout.addWidget(QLabel("Output Format:"), 3, 0)
+        from PyQt6.QtWidgets import QComboBox
+        self.format_combo = QComboBox()
+        self.format_combo.addItems(["JPEG", "WebP", "AVIF"])
+        self.format_combo.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
+        settings_layout.addWidget(self.format_combo, 3, 1)
+        
         # Preserve original structure
         self.preserve_structure_checkbox = QCheckBox("Preserve folder structure")
         self.preserve_structure_checkbox.setChecked(True)
-        settings_layout.addWidget(self.preserve_structure_checkbox, 3, 0, 1, 2)
+        settings_layout.addWidget(self.preserve_structure_checkbox, 4, 0, 1, 2)
         
         main_layout.addWidget(settings_group)
         
@@ -297,12 +313,24 @@ class MainWindow(QMainWindow):
         max_largest = self.max_largest_spinbox.value()
         max_smallest = self.max_smallest_spinbox.value()
         preserve_structure = self.preserve_structure_checkbox.isChecked()
+        output_format = self.format_combo.currentText()
         
         # Create compressor
-        compressor = ImageCompressor(quality, max_largest, max_smallest, preserve_structure)
+        compressor = ImageCompressor(quality, max_largest, max_smallest, preserve_structure, output_format)
+        
+        # Create compression settings dictionary
+        compression_settings = {
+            'quality': quality,
+            'max_largest_side': max_largest,
+            'max_smallest_side': max_smallest,
+            'preserve_structure': preserve_structure,
+            'output_format': output_format,
+            'input_directory': str(self.input_directory),
+            'output_directory': str(self.output_directory)
+        }
         
         # Create and start worker thread
-        self.compression_worker = CompressionWorker(compressor, self.input_directory, self.output_directory)
+        self.compression_worker = CompressionWorker(compressor, self.input_directory, self.output_directory, compression_settings)
         self.compression_worker.progress_updated.connect(self.update_progress)
         self.compression_worker.status_updated.connect(self.update_status)
         self.compression_worker.compression_finished.connect(self.compression_finished)
@@ -395,8 +423,9 @@ Output directory: {self.output_directory}
                     self.log_message(f"Pair {i+1}: Original vs Compressed - {img1_path.name} vs {img2_path.name}")
                 comparison_pairs.append(ImagePair(str(img1_path), str(img2_path), pair_name))
             
-            # Show comparison window
-            self.comparison_window = show_comparison_window(comparison_pairs)
+            # Show comparison window with settings file
+            settings_file = self.output_directory / 'compression_settings.json'
+            self.comparison_window = show_comparison_window(comparison_pairs, settings_file)
             self.log_message(f"Opened comparison window with {len(comparison_pairs)} image pairs")
             
         except Exception as e:

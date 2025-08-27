@@ -19,20 +19,23 @@ logger = logging.getLogger(__name__)
 class ImageCompressor:
     """Handles image compression with various parameters."""
     
-    def __init__(self, quality: int = 85, max_largest_side: int = 1920, max_smallest_side: int = 1080, preserve_structure: bool = True):
+    def __init__(self, quality: int = 85, max_largest_side: int = 1920, max_smallest_side: int = 1080, 
+                 preserve_structure: bool = True, output_format: str = 'JPEG'):
         """
         Initialize the image compressor.
         
         Args:
-            quality: JPEG quality (1-100)
+            quality: JPEG/WebP/AVIF quality (1-100)
             max_largest_side: Maximum size of the largest side in pixels
             max_smallest_side: Maximum size of the smallest side in pixels
             preserve_structure: Whether to preserve folder structure
+            output_format: Output format ('JPEG', 'WebP', 'AVIF')
         """
         self.quality = max(1, min(100, quality))
         self.max_largest_side = max_largest_side
         self.max_smallest_side = max_smallest_side
         self.preserve_structure = preserve_structure
+        self.output_format = output_format.upper()
         
         # Supported image formats
         self.supported_formats = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
@@ -107,15 +110,21 @@ class ImageCompressor:
                 # Ensure output directory exists
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 
-                # Save with appropriate settings
-                if output_path.suffix.lower() in {'.jpg', '.jpeg'}:
+                # Save with appropriate settings based on output format
+                if self.output_format == 'JPEG':
                     img.save(output_path, 'JPEG', quality=self.quality, optimize=True)
-                elif output_path.suffix.lower() == '.png':
-                    img.save(output_path, 'PNG', optimize=True)
-                elif output_path.suffix.lower() == '.webp':
+                elif self.output_format == 'WEBP':
                     img.save(output_path, 'WEBP', quality=self.quality)
+                elif self.output_format == 'AVIF':
+                    # AVIF support requires pillow-avif-plugin
+                    try:
+                        img.save(output_path, 'AVIF', quality=self.quality)
+                    except Exception as e:
+                        logger.warning(f"AVIF not supported, falling back to JPEG: {e}")
+                        img.save(output_path, 'JPEG', quality=self.quality, optimize=True)
                 else:
-                    img.save(output_path)
+                    # Fallback to JPEG
+                    img.save(output_path, 'JPEG', quality=self.quality, optimize=True)
                 
                 logger.info(f"Compressed: {input_path.name} -> {output_path.name}")
                 return True
@@ -162,19 +171,38 @@ class ImageCompressor:
                 if file_path.suffix.lower() in self.supported_formats:
                     total_files += 1
                     
-                    # Determine output file path
+                    # Determine output file path with correct extension
                     if self.preserve_structure:
-                        output_file = output_root / file
+                        # Change extension based on output format
+                        base_name = file_path.stem
+                        if self.output_format == 'JPEG':
+                            new_extension = '.jpg'
+                        elif self.output_format == 'WEBP':
+                            new_extension = '.webp'
+                        elif self.output_format == 'AVIF':
+                            new_extension = '.avif'
+                        else:
+                            new_extension = '.jpg'  # Default fallback
+                        
+                        output_file = output_root / f"{base_name}{new_extension}"
                     else:
                         # Create unique filename to avoid conflicts
                         base_name = file_path.stem
-                        extension = file_path.suffix
+                        if self.output_format == 'JPEG':
+                            new_extension = '.jpg'
+                        elif self.output_format == 'WEBP':
+                            new_extension = '.webp'
+                        elif self.output_format == 'AVIF':
+                            new_extension = '.avif'
+                        else:
+                            new_extension = '.jpg'  # Default fallback
+                        
                         counter = 1
-                        output_file = output_root / f"{base_name}{extension}"
+                        output_file = output_root / f"{base_name}{new_extension}"
                         
                         # If file exists, add counter
                         while output_file.exists():
-                            output_file = output_root / f"{base_name}_{counter}{extension}"
+                            output_file = output_root / f"{base_name}_{counter}{new_extension}"
                             counter += 1
                     
                     # Check if compression is needed
@@ -297,3 +325,63 @@ def create_image_pairs(compressed_dir: Path, original_dir: Path = None) -> List[
     
     logger.info(f"Created {len(image_pairs)} image pairs")
     return image_pairs
+
+
+def save_compression_settings(output_dir: Path, compression_settings: dict, image_pairs: List[Tuple[Path, Path]]):
+    """
+    Save compression settings and image pairs to a JSON file.
+    
+    Args:
+        output_dir: Directory where to save the settings file
+        compression_settings: Dictionary with compression parameters
+        image_pairs: List of image pairs for comparison
+    """
+    import json
+    from datetime import datetime
+    
+    settings_data = {
+        'compression_settings': compression_settings,
+        'compression_date': datetime.now().isoformat(),
+        'image_pairs': [
+            {
+                'original': str(original_path),
+                'compressed': str(compressed_path),
+                'original_name': original_path.name,
+                'compressed_name': compressed_path.name
+            }
+            for original_path, compressed_path in image_pairs
+        ],
+        'total_pairs': len(image_pairs)
+    }
+    
+    settings_file = output_dir / 'compression_settings.json'
+    try:
+        with open(settings_file, 'w', encoding='utf-8') as f:
+            json.dump(settings_data, f, indent=2, ensure_ascii=False)
+        logger.info(f"Compression settings saved to: {settings_file}")
+        return settings_file
+    except Exception as e:
+        logger.error(f"Failed to save compression settings: {e}")
+        return None
+
+
+def load_compression_settings(settings_file: Path) -> dict:
+    """
+    Load compression settings from a JSON file.
+    
+    Args:
+        settings_file: Path to the settings file
+        
+    Returns:
+        Dictionary with settings data
+    """
+    import json
+    
+    try:
+        with open(settings_file, 'r', encoding='utf-8') as f:
+            settings_data = json.load(f)
+        logger.info(f"Compression settings loaded from: {settings_file}")
+        return settings_data
+    except Exception as e:
+        logger.error(f"Failed to load compression settings: {e}")
+        return None

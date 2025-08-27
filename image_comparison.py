@@ -306,9 +306,9 @@ class ComparisonViewer(QWidget):
             self.update()
         
         else:
-            # Vertical scroll
+            # Vertical scroll (inverted)
             scroll_delta = delta // 8
-            self.pan_offset.setY(self.pan_offset.y() - scroll_delta)
+            self.pan_offset.setY(self.pan_offset.y() + scroll_delta)
             self.update()
     
     def is_near_slider(self, pos: QPoint) -> bool:
@@ -439,10 +439,11 @@ class ThumbnailCarousel(QScrollArea):
 class ComparisonWindow(QMainWindow):
     """Window for image comparison functionality."""
     
-    def __init__(self, image_pairs: List[ImagePair] = None):
+    def __init__(self, image_pairs: List[ImagePair] = None, settings_file: Path = None):
         super().__init__()
         self.image_pairs: List[ImagePair] = image_pairs or []
         self.current_pair_index = -1
+        self.settings_file = settings_file
         
         self.setup_ui()
         self.setup_connections()
@@ -506,8 +507,27 @@ class ComparisonWindow(QMainWindow):
             }
         """)
         
+        self.settings_button = QPushButton("View Settings")
+        self.settings_button.setStyleSheet("""
+            QPushButton {
+                background-color: #28a745;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #218838;
+            }
+            QPushButton:pressed {
+                background-color: #1e7e34;
+            }
+        """)
+        
         controls_layout.addWidget(self.load_button)
         controls_layout.addWidget(self.reset_button)
+        controls_layout.addWidget(self.settings_button)
         controls_layout.addStretch()
         
         # Status label
@@ -533,6 +553,7 @@ class ComparisonWindow(QMainWindow):
         """Set up signal connections."""
         self.load_button.clicked.connect(self.load_image_pair)
         self.reset_button.clicked.connect(self.reset_view)
+        self.settings_button.clicked.connect(self.view_settings)
         self.carousel.thumbnail_clicked.connect(self.load_image_pair_from_thumbnail)
     
     def load_image_pairs(self, image_pairs: List[ImagePair]):
@@ -601,14 +622,51 @@ class ComparisonWindow(QMainWindow):
                 self.status_label.setText(f"Loaded {len(self.image_pairs)} image pairs")
         else:
             self.status_label.setText("No images loaded")
+    
+    def view_settings(self):
+        """View compression settings."""
+        if not self.settings_file or not self.settings_file.exists():
+            QMessageBox.information(self, "No Settings", "No compression settings file found.")
+            return
+        
+        try:
+            from image_compression import load_compression_settings
+            settings_data = load_compression_settings(self.settings_file)
+            
+            if not settings_data:
+                QMessageBox.warning(self, "Error", "Failed to load compression settings.")
+                return
+            
+            # Format settings for display
+            comp_settings = settings_data.get('compression_settings', {})
+            settings_text = f"""
+Compression Settings:
+
+Quality: {comp_settings.get('quality', 'N/A')}%
+Max Largest Side: {comp_settings.get('max_largest_side', 'N/A')} px
+Max Smallest Side: {comp_settings.get('max_smallest_side', 'N/A')} px
+Output Format: {comp_settings.get('output_format', 'N/A')}
+Preserve Structure: {comp_settings.get('preserve_structure', 'N/A')}
+
+Input Directory: {comp_settings.get('input_directory', 'N/A')}
+Output Directory: {comp_settings.get('output_directory', 'N/A')}
+
+Compression Date: {settings_data.get('compression_date', 'N/A')}
+Total Image Pairs: {settings_data.get('total_pairs', 'N/A')}
+            """
+            
+            QMessageBox.information(self, "Compression Settings", settings_text)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to view settings:\n\n{str(e)}")
 
 
-def show_comparison_window(image_pairs: List[ImagePair] = None):
+def show_comparison_window(image_pairs: List[ImagePair] = None, settings_file: Path = None):
     """Show the comparison window with optional image pairs."""
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
     
-    window = ComparisonWindow(image_pairs)
+    window = ComparisonWindow(image_pairs, settings_file)
     window.show()
     return window
