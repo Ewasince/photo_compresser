@@ -271,7 +271,7 @@ class ImageCompressor:
         
         # Walk through input directory
         for file_path in input_root.rglob('*'):
-            if file_path.is_file() and file_path.suffix.lower() in self.supported_formats:
+            if file_path.is_file() and file_path.suffix.lower() in supported_extensions:
                 total_files += 1
                 
                 # Determine output file path
