@@ -8,12 +8,20 @@ import sys
 import os
 from typing import Optional, Tuple, List
 from pathlib import Path
+
+from PIL import Image
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QScrollArea, QLabel, QPushButton,
                              QFileDialog, QFrame, QSlider, QSplitter, QMessageBox)
 from PyQt6.QtCore import Qt, QPoint, QRect, QSize, pyqtSignal, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QWheelEvent, QMouseEvent, QKeyEvent
+from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QWheelEvent, QMouseEvent, QKeyEvent, QImage
 
+
+def pixmap_from_heic(path: str) -> QPixmap:
+    im = Image.open(path).convert("RGBA")
+    data = im.tobytes()                       # байты RGBA
+    qimg = QImage(data, im.width, im.height, QImage.Format.Format_RGBA8888).copy()
+    return QPixmap.fromImage(qimg)
 
 class ImagePair:
     """Represents a pair of images for comparison."""
@@ -28,13 +36,13 @@ class ImagePair:
     def get_pixmap1(self) -> QPixmap:
         """Get the first image pixmap, loading it if necessary."""
         if self._pixmap1 is None:
-            self._pixmap1 = QPixmap(self.image1_path)
+            self._pixmap1 = pixmap_from_heic(self.image1_path)
         return self._pixmap1
     
     def get_pixmap2(self) -> QPixmap:
         """Get the second image pixmap, loading it if necessary."""
         if self._pixmap2 is None:
-            self._pixmap2 = QPixmap(self.image2_path)
+            self._pixmap2 = pixmap_from_heic(self.image2_path)
         return self._pixmap2
     
     def create_thumbnail(self, size: QSize = QSize(100, 100)) -> QPixmap:
