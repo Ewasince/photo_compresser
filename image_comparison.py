@@ -127,6 +127,7 @@ class ComparisonViewer(QWidget):
     
     def get_display_rect(self) -> QRect:
         """Get the rectangle where images should be displayed."""
+        return self.rect().adjusted(10, 10, -10, -10)
     
     def get_original_image_sizes(self) -> Tuple[Tuple[int, int], Tuple[int, int]]:
         """Get original dimensions of both images."""
@@ -137,7 +138,6 @@ class ComparisonViewer(QWidget):
         pixmap2 = self.image_pair.get_pixmap2()
         
         return (pixmap1.width(), pixmap1.height()), (pixmap2.width(), pixmap2.height())
-        return self.rect().adjusted(10, 10, -10, -10)
     
     def get_scaled_pixmaps(self) -> Tuple[QPixmap, QPixmap]:
         """Get the scaled pixmaps for both images."""
