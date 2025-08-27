@@ -122,11 +122,11 @@ class ImageCompressor:
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 
                 # Use custom save functions if available
-                if self.output_format == 'JPEG' and save_jpeg:
+                if self.output_format == 'JPEG':
                     return self._save_jpeg_custom(img, input_path, output_path)
-                elif self.output_format == 'WEBP' and save_webp:
+                elif self.output_format == 'WEBP':
                     return self._save_webp_custom(img, input_path, output_path)
-                elif self.output_format == 'AVIF' and save_avif:
+                elif self.output_format == 'AVIF':
                     return self._save_avif_custom(img, input_path, output_path)
                 else:
                     # Fallback to basic Pillow saving
@@ -154,7 +154,7 @@ class ImageCompressor:
             }
             
             # Call custom save function
-            save_jpeg(str(input_path), str(output_path), **params)
+            save_jpeg(img, str(input_path), str(output_path), **params)
             logger.info(f"Compressed JPEG: {input_path.name} -> {output_path.name}")
             return True
             
@@ -175,7 +175,7 @@ class ImageCompressor:
             }
             
             # Call custom save function
-            save_webp(str(input_path), str(output_path), **params)
+            save_webp(img, str(input_path), str(output_path), **params)
             logger.info(f"Compressed WebP: {input_path.name} -> {output_path.name}")
             return True
             
@@ -203,7 +203,7 @@ class ImageCompressor:
             # Call custom save function
             # Note: range_ is renamed to range in the function call
             avif_params = params.copy()
-            save_avif(str(input_path), str(output_path), **avif_params)
+            save_avif(img, str(input_path), str(output_path), **avif_params)
             logger.info(f"Compressed AVIF: {input_path.name} -> {output_path.name}")
             return True
             
