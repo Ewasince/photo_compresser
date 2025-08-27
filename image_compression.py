@@ -116,12 +116,7 @@ class ImageCompressor:
                 elif self.output_format == 'WEBP':
                     img.save(output_path, 'WEBP', quality=self.quality)
                 elif self.output_format == 'AVIF':
-                    # AVIF support requires pillow-avif-plugin
-                    try:
-                        img.save(output_path, 'AVIF', quality=self.quality)
-                    except Exception as e:
-                        logger.warning(f"AVIF not supported, falling back to JPEG: {e}")
-                        img.save(output_path, 'JPEG', quality=self.quality, optimize=True)
+                    img.save(output_path, 'AVIF', quality=self.quality)
                 else:
                     # Fallback to JPEG
                     img.save(output_path, 'JPEG', quality=self.quality, optimize=True)
@@ -168,53 +163,7 @@ class ImageCompressor:
                 file_path = Path(root) / file
                 
                 # Check if it's an image file
-                if file_path.suffix.lower() in self.supported_formats:
-                    total_files += 1
-                    
-                    # Determine output file path with correct extension
-                    if self.preserve_structure:
-                        # Change extension based on output format
-                        base_name = file_path.stem
-                        if self.output_format == 'JPEG':
-                            new_extension = '.jpg'
-                        elif self.output_format == 'WEBP':
-                            new_extension = '.webp'
-                        elif self.output_format == 'AVIF':
-                            new_extension = '.avif'
-                        else:
-                            new_extension = '.jpg'  # Default fallback
-                        
-                        output_file = output_root / f"{base_name}{new_extension}"
-                    else:
-                        # Create unique filename to avoid conflicts
-                        base_name = file_path.stem
-                        if self.output_format == 'JPEG':
-                            new_extension = '.jpg'
-                        elif self.output_format == 'WEBP':
-                            new_extension = '.webp'
-                        elif self.output_format == 'AVIF':
-                            new_extension = '.avif'
-                        else:
-                            new_extension = '.jpg'  # Default fallback
-                        
-                        counter = 1
-                        output_file = output_root / f"{base_name}{new_extension}"
-                        
-                        # If file exists, add counter
-                        while output_file.exists():
-                            output_file = output_root / f"{base_name}_{counter}{new_extension}"
-                            counter += 1
-                    
-                    # Check if compression is needed
-                    if self.should_compress_image(file_path):
-                        if self.compress_image(file_path, output_file):
-                            compressed_files += 1
-                            compressed_paths.append(output_file)
-                    else:
-                        # Copy file without compression
-                        shutil.copy2(file_path, output_file)
-                        logger.info(f"Copied (no compression needed): {file_path.name}")
-                else:
+                if file_path.suffix.lower() not in self.supported_formats:
                     # Copy non-image files
                     if self.preserve_structure:
                         output_file = output_root / file
@@ -224,13 +173,33 @@ class ImageCompressor:
                         extension = file_path.suffix
                         counter = 1
                         output_file = output_root / f"{base_name}{extension}"
-                        
+
                         while output_file.exists():
                             output_file = output_root / f"{base_name}_{counter}{extension}"
                             counter += 1
-                    
+
                     shutil.copy2(file_path, output_file)
                     logger.info(f"Copied (non-image): {file_path.name}")
+                    continue
+
+                total_files += 1
+
+                base_name = file_path.stem
+                new_extension = self._get_extension_according_format()
+                output_file = output_root / f"{base_name}{new_extension}"
+
+                # Determine output file path with correct extension
+                if not self.preserve_structure:
+                    # Create unique filename to avoid conflicts
+                    counter = 1
+                    # If file exists, add counter
+                    while output_file.exists():
+                        output_file = output_root / f"{base_name}_{counter}{new_extension}"
+                        counter += 1
+
+                if self.compress_image(file_path, output_file):
+                    compressed_files += 1
+                    compressed_paths.append(output_file)
         
         return total_files, compressed_files, compressed_paths
     
@@ -256,6 +225,14 @@ class ImageCompressor:
             'compression_ratio_percent': compression_ratio,
             'space_saved_mb': (input_size - output_size) / (1024 * 1024)
         }
+
+
+    def _get_extension_according_format(self) -> str:
+        if self.output_format == 'WEBP':
+            return '.webp'
+        if self.output_format == 'AVIF':
+            return '.avif'
+        return '.jpg'  # Default fallback
 
 
 def create_image_pairs(compressed_dir: Path, original_dir: Path = None) -> List[Tuple[Path, Path]]:

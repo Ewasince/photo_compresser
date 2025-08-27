@@ -8,9 +8,9 @@ import sys
 import os
 from typing import Optional, Tuple, List
 from pathlib import Path
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                             QHBoxLayout, QScrollArea, QLabel, QPushButton, 
-                             QFileDialog, QFrame, QSlider, QSplitter)
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
+                             QHBoxLayout, QScrollArea, QLabel, QPushButton,
+                             QFileDialog, QFrame, QSlider, QSplitter, QMessageBox)
 from PyQt6.QtCore import Qt, QPoint, QRect, QSize, pyqtSignal, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QWheelEvent, QMouseEvent, QKeyEvent
 
