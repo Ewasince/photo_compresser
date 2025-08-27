@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class ImageCompressor:
     """Handles image compression with various parameters."""
     
-    def __init__(self, quality: int = 85, max_largest_side: int = 1920, max_smallest_side: int = 1080):
+    def __init__(self, quality: int = 85, max_largest_side: int = 1920, max_smallest_side: int = 1080, preserve_structure: bool = True):
         """
         Initialize the image compressor.
         
@@ -27,10 +27,12 @@ class ImageCompressor:
             quality: JPEG quality (1-100)
             max_largest_side: Maximum size of the largest side in pixels
             max_smallest_side: Maximum size of the smallest side in pixels
+            preserve_structure: Whether to preserve folder structure
         """
         self.quality = max(1, min(100, quality))
         self.max_largest_side = max_largest_side
         self.max_smallest_side = max_smallest_side
+        self.preserve_structure = preserve_structure
         
         # Supported image formats
         self.supported_formats = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
@@ -142,12 +144,15 @@ class ImageCompressor:
         
         # Walk through all files recursively
         for root, dirs, files in os.walk(input_dir):
-            # Calculate relative path
-            rel_path = Path(root).relative_to(input_dir)
-            output_root = output_dir / rel_path
-            
-            # Create corresponding output directory
-            output_root.mkdir(parents=True, exist_ok=True)
+            # Calculate relative path based on preserve_structure setting
+            if self.preserve_structure:
+                rel_path = Path(root).relative_to(input_dir)
+                output_root = output_dir / rel_path
+                # Create corresponding output directory
+                output_root.mkdir(parents=True, exist_ok=True)
+            else:
+                # Put all files in the root output directory
+                output_root = output_dir
             
             # Process files in current directory
             for file in files:
@@ -156,7 +161,21 @@ class ImageCompressor:
                 # Check if it's an image file
                 if file_path.suffix.lower() in self.supported_formats:
                     total_files += 1
-                    output_file = output_root / file
+                    
+                    # Determine output file path
+                    if self.preserve_structure:
+                        output_file = output_root / file
+                    else:
+                        # Create unique filename to avoid conflicts
+                        base_name = file_path.stem
+                        extension = file_path.suffix
+                        counter = 1
+                        output_file = output_root / f"{base_name}{extension}"
+                        
+                        # If file exists, add counter
+                        while output_file.exists():
+                            output_file = output_root / f"{base_name}_{counter}{extension}"
+                            counter += 1
                     
                     # Check if compression is needed
                     if self.should_compress_image(file_path):
@@ -169,7 +188,19 @@ class ImageCompressor:
                         logger.info(f"Copied (no compression needed): {file_path.name}")
                 else:
                     # Copy non-image files
-                    output_file = output_root / file
+                    if self.preserve_structure:
+                        output_file = output_root / file
+                    else:
+                        # Create unique filename for non-image files too
+                        base_name = file_path.stem
+                        extension = file_path.suffix
+                        counter = 1
+                        output_file = output_root / f"{base_name}{extension}"
+                        
+                        while output_file.exists():
+                            output_file = output_root / f"{base_name}_{counter}{extension}"
+                            counter += 1
+                    
                     shutil.copy2(file_path, output_file)
                     logger.info(f"Copied (non-image): {file_path.name}")
         

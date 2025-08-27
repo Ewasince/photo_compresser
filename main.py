@@ -295,9 +295,10 @@ class MainWindow(QMainWindow):
         quality = self.quality_spinbox.value()
         max_largest = self.max_largest_spinbox.value()
         max_smallest = self.max_smallest_spinbox.value()
+        preserve_structure = self.preserve_structure_checkbox.isChecked()
         
         # Create compressor
-        compressor = ImageCompressor(quality, max_largest, max_smallest)
+        compressor = ImageCompressor(quality, max_largest, max_smallest, preserve_structure)
         
         # Create and start worker thread
         self.compression_worker = CompressionWorker(compressor, self.input_directory, self.output_directory)
