@@ -17,6 +17,7 @@ from save_functions import save_jpeg, save_webp, save_avif
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+supported_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.webp', '.avif', '.heic', '.heif', '.gif', '.ico', '.ppm', '.pgm', '.pbm'}
 
 class ImageCompressor:
     """Handles image compression with various parameters."""
@@ -39,22 +40,19 @@ class ImageCompressor:
         self.preserve_structure = preserve_structure
         self.output_format = output_format.upper()
         
-        # Supported image formats
-        self.supported_formats = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp'}
-        
         # Store advanced parameters for each format
         self.jpeg_params = {}
         self.webp_params = {}
         self.avif_params = {}
-    
+
     def set_jpeg_parameters(self, **kwargs):
         """Set JPEG-specific compression parameters."""
         self.jpeg_params = kwargs
-    
+
     def set_webp_parameters(self, **kwargs):
         """Set WebP-specific compression parameters."""
         self.webp_params = kwargs
-    
+
     def set_avif_parameters(self, **kwargs):
         """Set AVIF-specific compression parameters."""
         self.avif_params = kwargs
@@ -337,21 +335,19 @@ class ImageCompressor:
 def create_image_pairs(compressed_dir: Path, original_dir: Path = None) -> List[Tuple[Path, Path]]:
     """
     Create pairs of original and compressed images for comparison.
-    
+
     Args:
         compressed_dir: Directory containing compressed images
         original_dir: Directory containing original images
-        
+
     Returns:
         List of tuples (original_path, compressed_path)
     """
     if not original_dir:
         logger.warning("No original directory provided, cannot create image pairs")
         return []
-    
-    image_pairs = []
-    supported_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp', '.webp'}
 
+    image_pairs = []
     logger.info(f"Creating image pairs from compressed dir: {compressed_dir}")
     logger.info(f"Original dir: {original_dir}")
     

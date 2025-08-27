@@ -90,7 +90,7 @@ photoViewer Cursor/
 
 ### Поддерживаемые форматы
 
-- **Входные**: JPEG, PNG, BMP, TIFF, WebP
+- **Входные**: JPEG, PNG, BMP, TIFF, WebP, AVIF, HEIC, HEIF, GIF, ICO, PPM, PGM, PBM
 - **Выходные**: JPEG, WebP, AVIF (с настраиваемым качеством)
 
 ### Алгоритм сжатия
@@ -106,6 +106,7 @@ photoViewer Cursor/
 - PyQt6 6.4.0+
 - Pillow 10.0.0+
 - pillow-avif-plugin 1.3.1+ (для поддержки AVIF)
+- pillow-heif 0.14.0+ (для поддержки HEIC/HEIF)
 
 ## Особенности
 

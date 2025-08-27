@@ -127,6 +127,16 @@ class ComparisonViewer(QWidget):
     
     def get_display_rect(self) -> QRect:
         """Get the rectangle where images should be displayed."""
+    
+    def get_original_image_sizes(self) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+        """Get original dimensions of both images."""
+        if not self.image_pair:
+            return (0, 0), (0, 0)
+        
+        pixmap1 = self.image_pair.get_pixmap1()
+        pixmap2 = self.image_pair.get_pixmap2()
+        
+        return (pixmap1.width(), pixmap1.height()), (pixmap2.width(), pixmap2.height())
         return self.rect().adjusted(10, 10, -10, -10)
     
     def get_scaled_pixmaps(self) -> Tuple[QPixmap, QPixmap]:
@@ -231,6 +241,9 @@ class ComparisonViewer(QWidget):
         painter.fillRect(handle_rect, QColor(255, 255, 0))
         painter.setPen(QPen(QColor(0, 0, 0), 1))
         painter.drawRect(handle_rect)
+        
+        # Draw image resolutions
+        self.draw_image_resolutions(painter, display_rect, img1_x, img1_y, img2_x, img2_y, pixmap1.width(), pixmap1.height(), pixmap2.width(), pixmap2.height())
     
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press events."""
@@ -327,6 +340,43 @@ class ComparisonViewer(QWidget):
         split_x = img1_x + int(pixmap1.width() * self.slider_position)
         
         return abs(pos.x() - split_x) <= 15
+    
+    def draw_image_resolutions(self, painter: QPainter, display_rect: QRect, 
+                             img1_x: int, img1_y: int, img2_x: int, img2_y: int,
+                             scaled_width1: int, scaled_height1: int, scaled_width2: int, scaled_height2: int):
+        """Draw image resolutions at the bottom of each image."""
+        if not self.image_pair:
+            return
+        
+        # Get original image sizes
+        (orig_width1, orig_height1), (orig_width2, orig_height2) = self.get_original_image_sizes()
+        
+        # Set up font and colors for resolution text
+        font = painter.font()
+        font.setPointSize(10)
+        font.setBold(True)
+        painter.setFont(font)
+        
+        # Background color for text (semi-transparent black)
+        painter.setPen(QPen(QColor(255, 255, 255)))  # White text
+        
+        # Resolution text for left image (bottom left)
+        left_resolution_text = f"{orig_width1} × {orig_height1}"
+        left_text_rect = QRect(img1_x + 10, img1_y + scaled_height1 - 40, 200, 30)
+        
+        # Draw background rectangle for left resolution
+        painter.fillRect(left_text_rect, QColor(0, 0, 0, 180))  # Semi-transparent black
+        painter.drawText(left_text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, 
+                        left_resolution_text)
+        
+        # Resolution text for right image (bottom right)
+        right_resolution_text = f"{orig_width2} × {orig_height2}"
+        right_text_rect = QRect(img2_x + scaled_width2 - 210, img2_y + scaled_height2 - 40, 200, 30)
+        
+        # Draw background rectangle for right resolution
+        painter.fillRect(right_text_rect, QColor(0, 0, 0, 180))  # Semi-transparent black
+        painter.drawText(right_text_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, 
+                        right_resolution_text)
 
 
 class ThumbnailWidget(QWidget):
@@ -574,7 +624,7 @@ class ComparisonWindow(QMainWindow):
         # Load first image
         file1, _ = QFileDialog.getOpenFileName(
             self, "Select First Image", "",
-            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.tiff)"
+            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.tif *.webp *.avif *.heic *.heif *.ico *.ppm *.ppm *.pgm *.pbm)"
         )
         
         if not file1:
@@ -583,7 +633,7 @@ class ComparisonWindow(QMainWindow):
         # Load second image
         file2, _ = QFileDialog.getOpenFileName(
             self, "Select Second Image", "",
-            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.tiff)"
+            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.tif *.webp *.avif *.heic *.heif *.ico *.ppm *.ppm *.pgm *.pbm)"
         )
         
         if not file2:
