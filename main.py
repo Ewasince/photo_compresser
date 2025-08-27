@@ -371,17 +371,28 @@ Output directory: {self.output_directory}
             return
         
         try:
-            # Create image pairs for comparison
-            image_pairs = create_image_pairs(self.output_directory)
+            # Create image pairs for comparison (original vs compressed)
+            self.log_message(f"Creating pairs from: {self.output_directory}")
+            self.log_message(f"Original directory: {self.input_directory}")
+            image_pairs = create_image_pairs(self.output_directory, self.input_directory)
             
             if not image_pairs:
                 QMessageBox.information(self, "No Images", "No image pairs found for comparison.")
                 return
             
+            self.log_message(f"Found {len(image_pairs)} image pairs")
+            
             # Convert to ImagePair objects for the comparison module
             comparison_pairs = []
             for i, (img1_path, img2_path) in enumerate(image_pairs):
-                pair_name = f"Pair {i+1}: {img1_path.name} vs {img2_path.name}"
+                if img1_path == img2_path:
+                    # Same file (fallback case)
+                    pair_name = f"Pair {i+1}: {img1_path.name}"
+                    self.log_message(f"Pair {i+1}: Same file - {img1_path.name}")
+                else:
+                    # Original vs compressed
+                    pair_name = f"Pair {i+1}: Original vs Compressed - {img1_path.name}"
+                    self.log_message(f"Pair {i+1}: Original vs Compressed - {img1_path.name} vs {img2_path.name}")
                 comparison_pairs.append(ImagePair(str(img1_path), str(img2_path), pair_name))
             
             # Show comparison window

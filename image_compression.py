@@ -230,33 +230,70 @@ class ImageCompressor:
         }
 
 
-def create_image_pairs(compressed_dir: Path) -> List[Tuple[Path, Path]]:
+def create_image_pairs(compressed_dir: Path, original_dir: Path = None) -> List[Tuple[Path, Path]]:
     """
     Create pairs of images for comparison (original vs compressed).
     
     Args:
         compressed_dir: Directory containing compressed images
+        original_dir: Directory containing original images (optional)
         
     Returns:
         List of tuples (original_path, compressed_path)
     """
+    logger.info(f"Creating image pairs from compressed_dir: {compressed_dir}")
+    if original_dir:
+        logger.info(f"Using original_dir: {original_dir}")
+    else:
+        logger.info("No original_dir provided, will use compressed files only")
+    
     image_pairs = []
     
     # Find all image files in the compressed directory
-    image_files = []
+    compressed_files = []
     for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.webp']:
-        image_files.extend(compressed_dir.rglob(f'*{ext}'))
-        image_files.extend(compressed_dir.rglob(f'*{ext.upper()}'))
+        compressed_files.extend(compressed_dir.rglob(f'*{ext}'))
+        compressed_files.extend(compressed_dir.rglob(f'*{ext.upper()}'))
     
     # Sort files for consistent pairing
-    image_files.sort()
+    compressed_files.sort()
+    logger.info(f"Found {len(compressed_files)} compressed image files")
     
-    # Create pairs (each image with the next one)
-    for i in range(0, len(image_files) - 1, 2):
-        image_pairs.append((image_files[i], image_files[i + 1]))
+    # If original directory is provided, create original vs compressed pairs
+    if original_dir and original_dir.exists():
+        for compressed_file in compressed_files:
+            # Calculate relative path from compressed directory
+            rel_path = compressed_file.relative_to(compressed_dir)
+            
+            # Try to find corresponding original file using the provided original_dir
+            original_file = original_dir / rel_path
+            
+            # If the compressed file is in the root of compressed directory (no subdirectories),
+            # try to find the original file in the original directory recursively
+            if not rel_path.parent.name and not original_file.exists():
+                # Search for the file in the original directory recursively
+                logger.info(f"Searching for {compressed_file.name} recursively in {original_dir}")
+                for original_file_candidate in original_dir.rglob(compressed_file.name):
+                    if original_file_candidate.is_file():
+                        original_file = original_file_candidate
+                        logger.info(f"Found original file at: {original_file}")
+                        break
+            
+            if original_file.exists():
+                image_pairs.append((original_file, compressed_file))
+                logger.info(f"Found pair: {original_file.name} vs {compressed_file.name}")
+            else:
+                # If original not found, use compressed file for both
+                image_pairs.append((compressed_file, compressed_file))
+                logger.warning(f"Original not found for {compressed_file.name}, using same file for both")
+    else:
+        # Fallback: create pairs from compressed files only
+        for i in range(0, len(compressed_files) - 1, 2):
+            image_pairs.append((compressed_files[i], compressed_files[i + 1]))
+        
+        # If odd number of files, add the last one with itself
+        if len(compressed_files) % 2 == 1:
+            image_pairs.append((compressed_files[-1], compressed_files[-1]))
     
-    # If odd number of files, add the last one with itself
-    if len(image_files) % 2 == 1:
-        image_pairs.append((image_files[-1], image_files[-1]))
-    
+    logger.info(f"Created {len(image_pairs)} image pairs")
     return image_pairs
