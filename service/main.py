@@ -73,7 +73,7 @@ class CompressionWorker(QThread):
             )
 
             # Get compression statistics
-            stats = self.compressor.get_compression_stats(self.input_dir, self.output_dir)
+            stats = self.compressor.get_compression_stats(self.input_dir, self.output_dir, failed_files)
             stats["total_files"] = total_files
             stats["compressed_files"] = compressed_files
             stats["failed_files_count"] = len(failed_files)

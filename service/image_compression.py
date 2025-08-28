@@ -314,11 +314,21 @@ class ImageCompressor:
         logger.info(f"Compression complete: {compressed_files}/{total_files} files processed")
         return total_files, compressed_files, compressed_paths, failed_files
 
-    def get_compression_stats(self, input_dir: Path, output_dir: Path) -> dict[str, Any]:
+    def get_compression_stats(
+        self, input_dir: Path, output_dir: Path, failed_files: list[Path] | None = None
+    ) -> dict[str, Any]:
         """Get compression statistics."""
         try:
-            input_size = sum(f.stat().st_size for f in input_dir.rglob("*") if f.is_file())
-            output_size = sum(f.stat().st_size for f in output_dir.rglob("*") if f.is_file())
+            failed_set = {f.resolve() for f in failed_files or []}
+
+            input_files = [
+                f
+                for f in input_dir.rglob("*")
+                if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS and f.resolve() not in failed_set
+            ]
+            output_files = [f for f in output_dir.rglob("*") if f.is_file()]
+            input_size = sum(f.stat().st_size for f in input_files)
+            output_size = sum(f.stat().st_size for f in output_files)
 
             input_size_mb = input_size / (1024 * 1024)
             output_size_mb = output_size / (1024 * 1024)
