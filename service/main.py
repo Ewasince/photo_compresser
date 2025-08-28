@@ -432,7 +432,7 @@ class MainWindow(QMainWindow):
         self.compare_btn = QPushButton("Compare Images")
         self.compare_btn.setStyleSheet("""
             QPushButton {
-                background-color: #17a2b8;
+                background-color: #0078d4;
                 color: white;
                 border: none;
                 padding: 12px 24px;
