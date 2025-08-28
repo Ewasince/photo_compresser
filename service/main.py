@@ -33,7 +33,6 @@ from PyQt6.QtWidgets import (
 )
 
 from service.file_utils import format_timedelta
-from service.image_comparison import ImagePair, show_comparison_window
 
 # Import our modules
 from service.image_compression import (
@@ -380,7 +379,6 @@ class MainWindow(QMainWindow):
                 background-color: #6c757d;
             }
         """)
-        self.compare_btn.setEnabled(False)
 
         button_layout.addWidget(self.compress_btn)
         button_layout.addWidget(self.compare_btn)
@@ -833,31 +831,20 @@ Output directory: {self.output_directory}
 
     def show_comparison(self) -> None:
         """Show the image comparison window."""
-        if not self.output_directory or not self.output_directory.exists():
-            QMessageBox.warning(self, "Warning", "Please complete compression first.")
-            return
-
         try:
-            assert self.output_directory is not None
-            # Create image pairs
-            comparison_pairs = []
-            image_pairs = create_image_pairs(self.output_directory, self.input_directory)
+            from service.image_comparison_viewer import MainWindow as ComparisonViewer
 
-            for img1_path, img2_path in image_pairs:
-                # Determine pair name based on whether it's a real comparison
-                if img1_path.parent != img2_path.parent:
-                    # This is a real comparison (original vs compressed)
-                    pair_name = f"{img1_path.name} (Original vs Compressed)"
+            self.comparison_window = ComparisonViewer()
+            self.comparison_window.show()
+
+            if self.output_directory and self.input_directory:
+                settings_file = self.output_directory / "compression_settings.json"
+                if settings_file.exists():
+                    self.comparison_window.load_config_from_path(settings_file)
                 else:
-                    # Fallback: same file comparison
-                    pair_name = f"{img1_path.name} (Same file)"
+                    self.comparison_window.load_directories_from_paths(self.output_directory, self.input_directory)
 
-                comparison_pairs.append(ImagePair(str(img1_path), str(img2_path), pair_name))
-
-            # Show comparison window with settings file
-            settings_file = self.output_directory / "compression_settings.json"
-            self.comparison_window = show_comparison_window(comparison_pairs, settings_file)
-            self.log_message(f"Opened comparison window with {len(comparison_pairs)} image pairs")
+            self.log_message("Opened comparison window")
 
         except Exception as e:
             self.log_message(f"Error opening comparison: {e}")
