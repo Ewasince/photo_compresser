@@ -11,11 +11,13 @@ from pathlib import Path
 class CacheConfig:
     """Cache configuration.
 
-    ``max_loaded_images`` defines the maximum number of full-size images kept in
-    memory. ``0`` disables the limit.
+    ``max_loaded_images`` limits full-size images in memory and
+    ``max_loaded_previews`` limits the number of cached previews. ``0``
+    disables the respective limit.
     """
 
     max_loaded_images: int = 0
+    max_loaded_previews: int = 0
 
 
 def load_cache_config(path: Path | None = None) -> CacheConfig:
@@ -33,4 +35,5 @@ def load_cache_config(path: Path | None = None) -> CacheConfig:
 
     return CacheConfig(
         max_loaded_images=int(data.get("max_loaded_images", 0)),
+        max_loaded_previews=int(data.get("max_loaded_previews", 0)),
     )

@@ -1,9 +1,8 @@
 """Helpers for working with pairs of images.
 
-This module implements dynamic loading of full-size images with an LRU cache
-whose limit is defined in ``cache_config.toml``. A value of 0 disables the
-limit. Previews are generated on demand without caching to avoid interface
-freezes.
+This module implements dynamic loading of full-size images and their previews
+using LRU caches whose limits are defined in ``cache_config.toml``. A value of
+``0`` disables the respective limit.
 """
 
 from __future__ import annotations
@@ -40,6 +39,7 @@ def _create_preview(path: str, width: int, height: int) -> QPixmap:
 
 CONFIG: CacheConfig = load_cache_config()
 _IMAGE_CACHE: OrderedDict[str, QPixmap] = OrderedDict()
+_PREVIEW_CACHE: OrderedDict[str, QPixmap] = OrderedDict()
 
 
 def _get_cached_pixmap(path: str) -> QPixmap:
@@ -55,6 +55,11 @@ def _get_cached_pixmap(path: str) -> QPixmap:
 
 
 def _create_combined_preview(path1: str, path2: str, size: QSize) -> QPixmap:
+    key = f"{path1}|{path2}|{size.width()}x{size.height()}"
+    if key in _PREVIEW_CACHE:
+        _PREVIEW_CACHE.move_to_end(key)
+        return _PREVIEW_CACHE[key]
+
     thumb_width = size.width() // 2
     thumb_height = size.height()
 
@@ -78,6 +83,9 @@ def _create_combined_preview(path1: str, path2: str, size: QSize) -> QPixmap:
     painter.drawLine(thumb_width, 0, thumb_width, thumb_height)
     painter.end()
 
+    if CONFIG.max_loaded_previews > 0 and len(_PREVIEW_CACHE) >= CONFIG.max_loaded_previews:
+        _PREVIEW_CACHE.popitem(last=False)
+    _PREVIEW_CACHE[key] = combined
     return combined
 
 

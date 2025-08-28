@@ -10,7 +10,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QPoint, QRect, QSize, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QMouseEvent,
@@ -58,6 +58,21 @@ BUTTON_STYLE = """
         color: #aaa;
     }
 """
+
+
+class _ThumbnailLoader(QThread):
+    """Background worker that generates a preview pixmap."""
+
+    loaded = pyqtSignal(QPixmap)
+
+    def __init__(self, image_pair: ImagePair, size: QSize) -> None:
+        super().__init__()
+        self._pair = image_pair
+        self._size = size
+
+    def run(self) -> None:  # pragma: no cover - thread execution
+        pixmap = self._pair.create_thumbnail(self._size)
+        self.loaded.emit(pixmap)
 
 
 class ComparisonViewer(QWidget):
@@ -438,6 +453,7 @@ class ThumbnailWidget(QWidget):
         self._spinner_angle = 0
         self._spinner_timer = QTimer(self)
         self._spinner_timer.timeout.connect(self._advance_spinner)
+        self._loader: _ThumbnailLoader | None = None
 
         self.setStyleSheet("""
             QWidget {
@@ -461,13 +477,16 @@ class ThumbnailWidget(QWidget):
             return
         self._is_loading = True
         self._spinner_timer.start(100)
-        QTimer.singleShot(0, self._load_thumbnail)
+        self._loader = _ThumbnailLoader(self.image_pair, self.thumbnail_size)
+        self._loader.loaded.connect(self._on_loaded)
+        self._loader.start()
         self.update()
 
-    def _load_thumbnail(self) -> None:
-        self._thumbnail = self.image_pair.create_thumbnail(self.thumbnail_size)
+    def _on_loaded(self, pixmap: QPixmap) -> None:
+        self._thumbnail = pixmap
         self._is_loading = False
         self._spinner_timer.stop()
+        self._loader = None
         self.update()
 
     def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: ARG002
