@@ -601,9 +601,9 @@ class CompressionStatsDialog(QDialog):
             val1_label = QLabel(format_param_value(key, val1))
             val2_label = QLabel(format_param_value(key, val2))
             diff_label = QLabel(diff_param_value(key, val1, val2))
-            if val1 != val2 and (key == "output_format" or fmt1 == fmt2):
+            if val1 == val2 and (key == "output_format" or fmt1 == fmt2):
                 for lbl in (metric_label, val1_label, val2_label, diff_label):
-                    lbl.setStyleSheet("color: #ff5555")
+                    lbl.setStyleSheet("color: #bdbdbd")
             layout.addWidget(metric_label, row, 0)
             layout.addWidget(val1_label, row, 1)
             layout.addWidget(val2_label, row, 2)
