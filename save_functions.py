@@ -18,7 +18,9 @@ def _flatten_for_jpeg(im: Image.Image, background=(255, 255, 255)) -> Image.Imag
     """
     if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
         bg = Image.new("RGB", im.size, background)
-        return Image.alpha_composite(bg.convert("RGBA"), im.convert("RGBA")).convert("RGB")
+        return Image.alpha_composite(bg.convert("RGBA"), im.convert("RGBA")).convert(
+            "RGB"
+        )
     return im.convert("RGB") if im.mode not in ("RGB", "L") else im
 
 
@@ -35,14 +37,14 @@ def save_jpeg(
     src: Union[str, Path],
     dst: Union[str, Path],
     *,
-    quality: int = 75,              # [БАЗОВЫЙ] 0–100 (дефолт Pillow: 75). Ниже → сильнее сжатие
+    quality: int = 75,  # [БАЗОВЫЙ] 0–100 (дефолт Pillow: 75). Ниже → сильнее сжатие
     subsampling: Union[int, str] = -1,
     # [ПРО] -1 (авто/как решит кодек), 2="4:2:0", 1="4:2:2", 0="4:4:4", либо строкой "4:2:0" и т.п.
-    progressive: bool = False,      # [БАЗОВЫЙ] False/True. Прогрессивная запись, иногда минус кб
-    optimize: bool = False,         # [ПРО] False/True. Оптимизация Хаффмана → чуть меньше файл
-    qtables: Optional[dict] = None, # [ПРО] Кастомные квант-таблицы (обычно не трогаем)
-    smooth: int = 0,                # [ПРО] 0–100. Лёгкое сглаживание (меньше шум → лучше сжимается)
-    keep_rgb: bool = False,         # [ПРО] Сохранить в RGB (без YCbCr). Может ↑размер, но убирает переход
+    progressive: bool = False,  # [БАЗОВЫЙ] False/True. Прогрессивная запись, иногда минус кб
+    optimize: bool = False,  # [ПРО] False/True. Оптимизация Хаффмана → чуть меньше файл
+    qtables: Optional[dict] = None,  # [ПРО] Кастомные квант-таблицы (обычно не трогаем)
+    smooth: int = 0,  # [ПРО] 0–100. Лёгкое сглаживание (меньше шум → лучше сжимается)
+    keep_rgb: bool = False,  # [ПРО] Сохранить в RGB (без YCbCr). Может ↑размер, но убирает переход
 ):
     """
     Сохраняет как JPEG, прокидывая только параметры, влияющие на качество/сжатие.
@@ -60,13 +62,13 @@ def save_jpeg(
 
     # Собираем kwargs только из «влияющих» параметров
     kwargs = dict(
-        quality=quality,            # 0–100 (дефолт 75)
-        subsampling=subsampling,    # -1, 0/1/2 или "4:4:4" и т.п.
-        progressive=progressive,    # False по умолчанию
-        optimize=optimize,          # False по умолчанию
-        qtables=qtables,            # None по умолчанию
-        smooth=smooth,              # 0 по умолчанию
-        keep_rgb=keep_rgb,          # False по умолчанию
+        quality=quality,  # 0–100 (дефолт 75)
+        subsampling=subsampling,  # -1, 0/1/2 или "4:4:4" и т.п.
+        progressive=progressive,  # False по умолчанию
+        optimize=optimize,  # False по умолчанию
+        qtables=qtables,  # None по умолчанию
+        smooth=smooth,  # 0 по умолчанию
+        keep_rgb=keep_rgb,  # False по умолчанию
     )
 
     # Сохраняем метаданные источника без изменений
@@ -90,11 +92,11 @@ def save_webp(
     src: Union[str, Path],
     dst: Union[str, Path],
     *,
-    lossless: bool = False,         # [БАЗОВЫЙ] False/True. Влияет радикально на метод сжатия
-    quality: int = 80,              # [БАЗОВЫЙ] 0–100. Для lossless — «усилие» (0–100), дефолт 80
-    method: int = 4,                # [ПРО] 0–6. Медленнее → лучше сжатие при том же качестве (дефолт 4)
-    alpha_quality: int = 100,       # [ПРО] 0–100. Качество альфы в lossy; дефолт 100
-    exact: bool = False,            # [ПРО] False/True. Сохранять RGB под прозрачностью (↑размер, ↑качество)
+    lossless: bool = False,  # [БАЗОВЫЙ] False/True. Влияет радикально на метод сжатия
+    quality: int = 80,  # [БАЗОВЫЙ] 0–100. Для lossless — «усилие» (0–100), дефолт 80
+    method: int = 4,  # [ПРО] 0–6. Медленнее → лучше сжатие при том же качестве (дефолт 4)
+    alpha_quality: int = 100,  # [ПРО] 0–100. Качество альфы в lossy; дефолт 100
+    exact: bool = False,  # [ПРО] False/True. Сохранять RGB под прозрачностью (↑размер, ↑качество)
 ):
     """
     Сохраняет как WebP. Прокидывает только влияющие на качество/сжатие параметры.
@@ -111,11 +113,11 @@ def save_webp(
     xmp = im.info.get("xmp")
 
     kwargs = dict(
-        lossless=lossless,          # False
-        quality=quality,            # 0–100 (80)
-        method=method,              # 0–6 (4)
-        alpha_quality=alpha_quality,# 0–100 (100)
-        exact=exact,                # False
+        lossless=lossless,  # False
+        quality=quality,  # 0–100 (80)
+        method=method,  # 0–6 (4)
+        alpha_quality=alpha_quality,  # 0–100 (100)
+        exact=exact,  # False
     )
 
     # Сохраняем метаданные источника без изменений
@@ -139,16 +141,16 @@ def save_avif(
     src: Union[str, Path],
     dst: Union[str, Path],
     *,
-    quality: int = 75,              # [БАЗОВЫЙ] 0–100 (дефолт 75). Ниже → сильнее сжатие
-    subsampling: str = "4:2:0",     # [БАЗОВЫЙ] "4:2:0" (дефолт) | "4:2:2" | "4:4:4" | "4:0:0"
-    speed: int = 6,                 # [ПРО] 0–10. 0 — медленнее/лучше RD, 10 — быстрее/хуже (дефолт 6)
-    codec: str = "auto",            # [ПРО] "auto"(деф.)|"aom"|"rav1e"|"svt" (если доступны)
-    range_: str = "full",           # [ПРО] "full"(деф.)|"limited" (тональный диапазон)
-    qmin: int = -1,                 # [ПРО] -1 (деф.) или 0–63. Мин. квантайзер (жёсткая нижняя граница)
-    qmax: int = -1,                 # [ПРО] -1 (деф.) или 0–63. Макс. квантайзер (верхняя граница)
-    autotiling: bool = True,        # [ПРО] True (деф.) | False. Автотайлинг для декод-скорости
-    tile_rows_log2: int = 0,        # [ПРО] 0..6 (лог2). Явные тайлы по строкам (если autotiling=False)
-    tile_cols_log2: int = 0,        # [ПРО] 0..6 (лог2). Явные тайлы по столбцам (если autotiling=False)
+    quality: int = 75,  # [БАЗОВЫЙ] 0–100 (дефолт 75). Ниже → сильнее сжатие
+    subsampling: str = "4:2:0",  # [БАЗОВЫЙ] "4:2:0" (дефолт) | "4:2:2" | "4:4:4" | "4:0:0"
+    speed: int = 6,  # [ПРО] 0–10. 0 — медленнее/лучше RD, 10 — быстрее/хуже (дефолт 6)
+    codec: str = "auto",  # [ПРО] "auto"(деф.)|"aom"|"rav1e"|"svt" (если доступны)
+    range_: str = "full",  # [ПРО] "full"(деф.)|"limited" (тональный диапазон)
+    qmin: int = -1,  # [ПРО] -1 (деф.) или 0–63. Мин. квантайзер (жёсткая нижняя граница)
+    qmax: int = -1,  # [ПРО] -1 (деф.) или 0–63. Макс. квантайзер (верхняя граница)
+    autotiling: bool = True,  # [ПРО] True (деф.) | False. Автотайлинг для декод-скорости
+    tile_rows_log2: int = 0,  # [ПРО] 0..6 (лог2). Явные тайлы по строкам (если autotiling=False)
+    tile_cols_log2: int = 0,  # [ПРО] 0..6 (лог2). Явные тайлы по столбцам (если autotiling=False)
 ):
     """
     Сохраняет как AVIF. Прокидывает только влияющие параметры (качество, сабсэмплинг,
@@ -163,13 +165,13 @@ def save_avif(
     xmp = im.info.get("xmp")
 
     kwargs = dict(
-        quality=quality,            # 0–100 (75)
-        subsampling=subsampling,    # "4:2:0" (деф.), "4:2:2", "4:4:4", "4:0:0"
-        speed=speed,                # 0–10 (6)
-        codec=codec,                # "auto"
-        range=range_,               # "full"
-        qmin=qmin,                  # -1
-        qmax=qmax,                  # -1
+        quality=quality,  # 0–100 (75)
+        subsampling=subsampling,  # "4:2:0" (деф.), "4:2:2", "4:4:4", "4:0:0"
+        speed=speed,  # 0–10 (6)
+        codec=codec,  # "auto"
+        range=range_,  # "full"
+        qmin=qmin,  # -1
+        qmax=qmax,  # -1
     )
 
     # Тайлинг: по умолчанию autotiling=True (соответствует поведению плагина)

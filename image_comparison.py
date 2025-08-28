@@ -10,104 +10,131 @@ from typing import Optional, Tuple, List
 from pathlib import Path
 
 from PIL import Image
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                             QHBoxLayout, QScrollArea, QLabel, QPushButton,
-                             QFileDialog, QFrame, QSlider, QSplitter, QMessageBox)
-from PyQt6.QtCore import Qt, QPoint, QRect, QSize, pyqtSignal, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QWheelEvent, QMouseEvent, QKeyEvent, QImage
+from PyQt6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QScrollArea,
+    QLabel,
+    QPushButton,
+    QFileDialog,
+    QMessageBox,
+)
+from PyQt6.QtCore import Qt, QPoint, QRect, QSize, pyqtSignal
+from PyQt6.QtGui import (
+    QPixmap,
+    QPainter,
+    QPen,
+    QColor,
+    QWheelEvent,
+    QMouseEvent,
+    QImage,
+)
 
 
 def pixmap_from_heic(path: str) -> QPixmap:
     im = Image.open(path).convert("RGBA")
-    data = im.tobytes()                       # байты RGBA
+    data = im.tobytes()  # байты RGBA
     qimg = QImage(data, im.width, im.height, QImage.Format.Format_RGBA8888).copy()
     return QPixmap.fromImage(qimg)
 
+
 class ImagePair:
     """Represents a pair of images for comparison."""
-    
+
     def __init__(self, image1_path: str, image2_path: str, name: str = ""):
         self.image1_path = image1_path
         self.image2_path = image2_path
-        self.name = name or f"{os.path.basename(image1_path)} vs {os.path.basename(image2_path)}"
+        self.name = (
+            name
+            or f"{os.path.basename(image1_path)} vs {os.path.basename(image2_path)}"
+        )
         self._pixmap1: Optional[QPixmap] = None
         self._pixmap2: Optional[QPixmap] = None
-    
+
     def get_pixmap1(self) -> QPixmap:
         """Get the first image pixmap, loading it if necessary."""
         if self._pixmap1 is None:
             self._pixmap1 = pixmap_from_heic(self.image1_path)
         return self._pixmap1
-    
+
     def get_pixmap2(self) -> QPixmap:
         """Get the second image pixmap, loading it if necessary."""
         if self._pixmap2 is None:
             self._pixmap2 = pixmap_from_heic(self.image2_path)
         return self._pixmap2
-    
+
     def create_thumbnail(self, size: QSize = QSize(100, 100)) -> QPixmap:
         """Create a thumbnail showing both images side by side."""
         pixmap1 = self.get_pixmap1()
         pixmap2 = self.get_pixmap2()
-        
+
         # Create a combined thumbnail
         combined = QPixmap(size)
         combined.fill(Qt.GlobalColor.white)
-        
+
         painter = QPainter(combined)
-        
+
         # Calculate thumbnail dimensions
         thumb_width = size.width() // 2
         thumb_height = size.height()
-        
+
         # Draw first image (left side)
-        scaled1 = pixmap1.scaled(thumb_width, thumb_height, 
-                                Qt.AspectRatioMode.KeepAspectRatio, 
-                                Qt.TransformationMode.SmoothTransformation)
+        scaled1 = pixmap1.scaled(
+            thumb_width,
+            thumb_height,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
         x1 = (thumb_width - scaled1.width()) // 2
         y1 = (thumb_height - scaled1.height()) // 2
         painter.drawPixmap(x1, y1, scaled1)
-        
+
         # Draw second image (right side)
-        scaled2 = pixmap2.scaled(thumb_width, thumb_height, 
-                                Qt.AspectRatioMode.KeepAspectRatio, 
-                                Qt.TransformationMode.SmoothTransformation)
+        scaled2 = pixmap2.scaled(
+            thumb_width,
+            thumb_height,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
         x2 = thumb_width + (thumb_width - scaled2.width()) // 2
         y2 = (thumb_height - scaled2.height()) // 2
         painter.drawPixmap(x2, y2, scaled2)
-        
+
         # Draw divider line
         pen = QPen(QColor(100, 100, 100), 2)
         painter.setPen(pen)
         painter.drawLine(thumb_width, 0, thumb_width, thumb_height)
-        
+
         painter.end()
         return combined
 
 
 class ComparisonViewer(QWidget):
     """Main widget for displaying and comparing images."""
-    
+
     def __init__(self):
         super().__init__()
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        
+
         # Image data
         self.image_pair: Optional[ImagePair] = None
         self.zoom_factor = 1.0
         self.pan_offset = QPoint(0, 0)
         self.slider_position = 0.5  # 0.0 = left, 1.0 = right
-        
+
         # Mouse interaction state
         self.is_panning = False
         self.is_dragging_slider = False
         self.last_mouse_pos = QPoint()
-        
+
         # Minimum zoom and pan limits
         self.min_zoom = 0.1
         self.max_zoom = 10.0
-        
+
         # Set up the widget
         self.setMinimumSize(400, 300)
         self.setStyleSheet("""
@@ -116,143 +143,187 @@ class ComparisonViewer(QWidget):
                 color: white;
             }
         """)
-    
+
     def set_image_pair(self, image_pair: ImagePair):
         """Set the image pair to display."""
         self.image_pair = image_pair
         self.reset_view()
         self.update()
-    
+
     def reset_view(self):
         """Reset zoom and pan to fit images."""
         if not self.image_pair:
             return
-        
+
         self.zoom_factor = 1.0
         self.pan_offset = QPoint(0, 0)
         self.slider_position = 0.5
         self.update()
-    
+
     def get_display_rect(self) -> QRect:
         """Get the rectangle where images should be displayed."""
         return self.rect().adjusted(10, 10, -10, -10)
-    
+
     def get_original_image_sizes(self) -> Tuple[Tuple[int, int], Tuple[int, int]]:
         """Get original dimensions of both images."""
         if not self.image_pair:
             return (0, 0), (0, 0)
-        
+
         pixmap1 = self.image_pair.get_pixmap1()
         pixmap2 = self.image_pair.get_pixmap2()
-        
+
         return (pixmap1.width(), pixmap1.height()), (pixmap2.width(), pixmap2.height())
-    
+
     def get_scaled_pixmaps(self) -> Tuple[QPixmap, QPixmap]:
         """Get the scaled pixmaps for both images."""
         if not self.image_pair:
             return QPixmap(), QPixmap()
-        
+
         pixmap1 = self.image_pair.get_pixmap1()
         pixmap2 = self.image_pair.get_pixmap2()
-        
+
         # Check if pixmaps are valid
         if pixmap1.isNull() or pixmap2.isNull():
             return QPixmap(), QPixmap()
-        
+
         # Scale both images to the same size for comparison
         display_rect = self.get_display_rect()
         target_size = display_rect.size()
-        
+
         # Ensure target size is valid
         if target_size.width() <= 0 or target_size.height() <= 0:
             return QPixmap(), QPixmap()
-        
-        scaled1 = pixmap1.scaled(target_size, Qt.AspectRatioMode.KeepAspectRatio, 
-                                Qt.TransformationMode.SmoothTransformation)
-        scaled2 = pixmap2.scaled(target_size, Qt.AspectRatioMode.KeepAspectRatio, 
-                                Qt.TransformationMode.SmoothTransformation)
-        
+
+        scaled1 = pixmap1.scaled(
+            target_size,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        scaled2 = pixmap2.scaled(
+            target_size,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+
         # Apply zoom with safety checks
         if self.zoom_factor != 1.0 and self.zoom_factor > 0:
             try:
                 zoomed_size = scaled1.size() * self.zoom_factor
                 # Ensure zoomed size is reasonable
-                if zoomed_size.width() > 0 and zoomed_size.height() > 0 and zoomed_size.width() < 10000 and zoomed_size.height() < 10000:
-                    scaled1 = scaled1.scaled(zoomed_size, Qt.AspectRatioMode.KeepAspectRatio, 
-                                           Qt.TransformationMode.SmoothTransformation)
-                    scaled2 = scaled2.scaled(zoomed_size, Qt.AspectRatioMode.KeepAspectRatio, 
-                                           Qt.TransformationMode.SmoothTransformation)
+                if (
+                    zoomed_size.width() > 0
+                    and zoomed_size.height() > 0
+                    and zoomed_size.width() < 10000
+                    and zoomed_size.height() < 10000
+                ):
+                    scaled1 = scaled1.scaled(
+                        zoomed_size,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                    scaled2 = scaled2.scaled(
+                        zoomed_size,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
             except (ValueError, OverflowError):
                 # If zoom calculation fails, return unscaled images
                 pass
-        
+
         return scaled1, scaled2
-    
+
     def paintEvent(self, event):
         """Custom paint event for drawing the comparison view."""
         if not self.image_pair:
             # Draw placeholder
             painter = QPainter(self)
             painter.setPen(QPen(QColor(100, 100, 100)))
-            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, 
-                           "Load images to start comparison")
+            painter.drawText(
+                self.rect(),
+                Qt.AlignmentFlag.AlignCenter,
+                "Load images to start comparison",
+            )
             return
-        
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        
+
         # Get scaled pixmaps
         pixmap1, pixmap2 = self.get_scaled_pixmaps()
         if pixmap1.isNull() or pixmap2.isNull():
             return
-        
+
         # Additional safety checks
-        if pixmap1.width() <= 0 or pixmap1.height() <= 0 or pixmap2.width() <= 0 or pixmap2.height() <= 0:
+        if (
+            pixmap1.width() <= 0
+            or pixmap1.height() <= 0
+            or pixmap2.width() <= 0
+            or pixmap2.height() <= 0
+        ):
             return
-        
+
         # Calculate display positions
         display_rect = self.get_display_rect()
         center_x = display_rect.center().x() + self.pan_offset.x()
         center_y = display_rect.center().y() + self.pan_offset.y()
-        
+
         # Calculate image positions (centered)
         img1_x = center_x - pixmap1.width() // 2
         img1_y = center_y - pixmap1.height() // 2
         img2_x = center_x - pixmap2.width() // 2
         img2_y = center_y - pixmap2.height() // 2
-        
+
         # Calculate split position
         split_x = img1_x + int(pixmap1.width() * self.slider_position)
-        
+
         # Draw first image (left part)
         if split_x > img1_x:
             left_rect = QRect(img1_x, img1_y, split_x - img1_x, pixmap1.height())
-            painter.drawPixmap(left_rect, pixmap1, 
-                             QRect(0, 0, split_x - img1_x, pixmap1.height()))
-        
+            painter.drawPixmap(
+                left_rect, pixmap1, QRect(0, 0, split_x - img1_x, pixmap1.height())
+            )
+
         # Draw second image (right part)
         if split_x < img2_x + pixmap2.width():
-            right_rect = QRect(split_x, img2_y, 
-                             img2_x + pixmap2.width() - split_x, pixmap2.height())
+            right_rect = QRect(
+                split_x, img2_y, img2_x + pixmap2.width() - split_x, pixmap2.height()
+            )
             right_source_x = int((split_x - img2_x))
             if right_source_x >= 0 and right_source_x < pixmap2.width():
                 source_width = pixmap2.width() - right_source_x
                 if source_width > 0:
-                    painter.drawPixmap(right_rect, pixmap2, 
-                                     QRect(right_source_x, 0, source_width, pixmap2.height()))
-        
+                    painter.drawPixmap(
+                        right_rect,
+                        pixmap2,
+                        QRect(right_source_x, 0, source_width, pixmap2.height()),
+                    )
+
         # Draw thin slider handle (no line)
         handle_size = 8  # Much thinner handle
-        handle_rect = QRect(split_x - handle_size // 2, 
-                           center_y - handle_size // 2,
-                           handle_size, handle_size)
+        handle_rect = QRect(
+            split_x - handle_size // 2,
+            center_y - handle_size // 2,
+            handle_size,
+            handle_size,
+        )
         painter.fillRect(handle_rect, QColor(255, 255, 0))
         painter.setPen(QPen(QColor(0, 0, 0), 1))
         painter.drawRect(handle_rect)
-        
+
         # Draw image resolutions
-        self.draw_image_resolutions(painter, display_rect, img1_x, img1_y, img2_x, img2_y, pixmap1.width(), pixmap1.height(), pixmap2.width(), pixmap2.height())
-    
+        self.draw_image_resolutions(
+            painter,
+            display_rect,
+            img1_x,
+            img1_y,
+            img2_x,
+            img2_y,
+            pixmap1.width(),
+            pixmap1.height(),
+            pixmap2.width(),
+            pixmap2.height(),
+        )
+
     def mousePressEvent(self, event: QMouseEvent):
         """Handle mouse press events."""
         if event.button() == Qt.MouseButton.LeftButton:
@@ -263,38 +334,38 @@ class ComparisonViewer(QWidget):
                 self.is_panning = True
             self.last_mouse_pos = event.pos()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
-    
+
     def mouseReleaseEvent(self, event: QMouseEvent):
         """Handle mouse release events."""
         if event.button() == Qt.MouseButton.LeftButton:
             self.is_panning = False
             self.is_dragging_slider = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
-    
+
     def mouseMoveEvent(self, event: QMouseEvent):
         """Handle mouse move events."""
         if not self.image_pair:
             return
-        
+
         if self.is_dragging_slider:
             # Update slider position
             display_rect = self.get_display_rect()
             pixmap1, _ = self.get_scaled_pixmaps()
-            
+
             if pixmap1.width() > 0:
                 center_x = display_rect.center().x() + self.pan_offset.x()
                 img1_x = center_x - pixmap1.width() // 2
                 relative_x = event.pos().x() - img1_x
                 self.slider_position = max(0.0, min(1.0, relative_x / pixmap1.width()))
                 self.update()
-        
+
         elif self.is_panning:
             # Update pan offset
             delta = event.pos() - self.last_mouse_pos
             self.pan_offset += delta
             self.last_mouse_pos = event.pos()
             self.update()
-        
+
         # Update cursor
         if self.is_near_slider(event.pos()):
             self.setCursor(Qt.CursorShape.SizeHorCursor)
@@ -302,105 +373,127 @@ class ComparisonViewer(QWidget):
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
-    
+
     def wheelEvent(self, event: QWheelEvent):
         """Handle mouse wheel events for zooming and scrolling."""
         if not self.image_pair:
             return
-        
+
         modifiers = event.modifiers()
         delta = event.angleDelta().y()
-        
+
         if modifiers & Qt.KeyboardModifier.ControlModifier:
             # Zoom in/out - simplified zoom calculation
             zoom_delta = 0.1 if delta > 0 else -0.1
             new_zoom = self.zoom_factor + zoom_delta
-            
+
             if self.min_zoom <= new_zoom <= self.max_zoom:
                 self.zoom_factor = new_zoom
                 self.update()
-        
+
         elif modifiers & Qt.KeyboardModifier.ShiftModifier:
             # Horizontal scroll
             scroll_delta = delta // 8
             self.pan_offset.setX(self.pan_offset.x() - scroll_delta)
             self.update()
-        
+
         else:
             # Vertical scroll (inverted)
             scroll_delta = delta // 8
             self.pan_offset.setY(self.pan_offset.y() + scroll_delta)
             self.update()
-    
+
     def is_near_slider(self, pos: QPoint) -> bool:
         """Check if a position is near the slider."""
         if not self.image_pair:
             return False
-        
+
         display_rect = self.get_display_rect()
         pixmap1, _ = self.get_scaled_pixmaps()
-        
+
         if pixmap1.width() <= 0:
             return False
-        
+
         center_x = display_rect.center().x() + self.pan_offset.x()
         img1_x = center_x - pixmap1.width() // 2
         split_x = img1_x + int(pixmap1.width() * self.slider_position)
-        
+
         return abs(pos.x() - split_x) <= 15
-    
-    def draw_image_resolutions(self, painter: QPainter, display_rect: QRect, 
-                             img1_x: int, img1_y: int, img2_x: int, img2_y: int,
-                             scaled_width1: int, scaled_height1: int, scaled_width2: int, scaled_height2: int):
+
+    def draw_image_resolutions(
+        self,
+        painter: QPainter,
+        display_rect: QRect,
+        img1_x: int,
+        img1_y: int,
+        img2_x: int,
+        img2_y: int,
+        scaled_width1: int,
+        scaled_height1: int,
+        scaled_width2: int,
+        scaled_height2: int,
+    ):
         """Draw image resolutions at the bottom of each image."""
         if not self.image_pair:
             return
-        
+
         # Get original image sizes
-        (orig_width1, orig_height1), (orig_width2, orig_height2) = self.get_original_image_sizes()
-        
+        (orig_width1, orig_height1), (orig_width2, orig_height2) = (
+            self.get_original_image_sizes()
+        )
+
         # Set up font and colors for resolution text
         font = painter.font()
         font.setPointSize(10)
         font.setBold(True)
         painter.setFont(font)
-        
+
         # Background color for text (semi-transparent black)
         painter.setPen(QPen(QColor(255, 255, 255)))  # White text
-        
+
         # Resolution text for left image (bottom left)
         left_resolution_text = f"{orig_width1} × {orig_height1}"
         left_text_rect = QRect(img1_x + 10, img1_y + scaled_height1 - 40, 200, 30)
-        
+
         # Draw background rectangle for left resolution
         painter.fillRect(left_text_rect, QColor(0, 0, 0, 180))  # Semi-transparent black
-        painter.drawText(left_text_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, 
-                        left_resolution_text)
-        
+        painter.drawText(
+            left_text_rect,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            left_resolution_text,
+        )
+
         # Resolution text for right image (bottom right)
         right_resolution_text = f"{orig_width2} × {orig_height2}"
-        right_text_rect = QRect(img2_x + scaled_width2 - 210, img2_y + scaled_height2 - 40, 200, 30)
-        
+        right_text_rect = QRect(
+            img2_x + scaled_width2 - 210, img2_y + scaled_height2 - 40, 200, 30
+        )
+
         # Draw background rectangle for right resolution
-        painter.fillRect(right_text_rect, QColor(0, 0, 0, 180))  # Semi-transparent black
-        painter.drawText(right_text_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, 
-                        right_resolution_text)
+        painter.fillRect(
+            right_text_rect, QColor(0, 0, 0, 180)
+        )  # Semi-transparent black
+        painter.drawText(
+            right_text_rect,
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+            right_resolution_text,
+        )
 
 
 class ThumbnailWidget(QWidget):
     """Widget for displaying a thumbnail in the carousel."""
-    
+
     clicked = pyqtSignal(ImagePair)
-    
+
     def __init__(self, image_pair: ImagePair, parent=None):
         super().__init__(parent)
         self.image_pair = image_pair
         self.setFixedSize(120, 120)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        
+
         # Create thumbnail
         self.thumbnail = image_pair.create_thumbnail(QSize(100, 100))
-        
+
         self.setStyleSheet("""
             QWidget {
                 border: 2px solid #444;
@@ -413,27 +506,31 @@ class ThumbnailWidget(QWidget):
                 background-color: #444;
             }
         """)
-    
+
     def paintEvent(self, event):
         """Draw the thumbnail."""
         painter = QPainter(self)
-        
+
         # Draw thumbnail centered
         x = (self.width() - self.thumbnail.width()) // 2
         y = (self.height() - self.thumbnail.height()) // 2
         painter.drawPixmap(x, y, self.thumbnail)
-        
+
         # Draw name at bottom
         painter.setPen(QPen(QColor(255, 255, 255)))
         font = painter.font()
         font.setPointSize(8)
         painter.setFont(font)
-        
+
         text_rect = QRect(0, self.height() - 20, self.width(), 20)
-        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, 
-                        self.image_pair.name[:15] + "..." if len(self.image_pair.name) > 15 
-                        else self.image_pair.name)
-    
+        painter.drawText(
+            text_rect,
+            Qt.AlignmentFlag.AlignCenter,
+            self.image_pair.name[:15] + "..."
+            if len(self.image_pair.name) > 15
+            else self.image_pair.name,
+        )
+
     def mousePressEvent(self, event: QMouseEvent):
         """Handle click events."""
         if event.button() == Qt.MouseButton.LeftButton:
@@ -442,24 +539,24 @@ class ThumbnailWidget(QWidget):
 
 class ThumbnailCarousel(QScrollArea):
     """Horizontal scroll area for displaying image pair thumbnails."""
-    
+
     thumbnail_clicked = pyqtSignal(ImagePair)
-    
+
     def __init__(self):
         super().__init__()
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setFixedHeight(140)
-        
+
         # Create container widget
         self.container = QWidget()
         self.container_layout = QHBoxLayout(self.container)
         self.container_layout.setContentsMargins(10, 10, 10, 10)
         self.container_layout.setSpacing(10)
-        
+
         self.setWidget(self.container)
-        
+
         self.setStyleSheet("""
             QScrollArea {
                 background-color: #1e1e1e;
@@ -479,13 +576,13 @@ class ThumbnailCarousel(QScrollArea):
                 background-color: #888;
             }
         """)
-    
+
     def add_image_pair(self, image_pair: ImagePair):
         """Add an image pair thumbnail to the carousel."""
         thumbnail = ThumbnailWidget(image_pair)
         thumbnail.clicked.connect(self.thumbnail_clicked.emit)
         self.container_layout.addWidget(thumbnail)
-    
+
     def clear(self):
         """Clear all thumbnails."""
         while self.container_layout.count():
@@ -496,16 +593,16 @@ class ThumbnailCarousel(QScrollArea):
 
 class ComparisonWindow(QMainWindow):
     """Window for image comparison functionality."""
-    
+
     def __init__(self, image_pairs: List[ImagePair] = None, settings_file: Path = None):
         super().__init__()
         self.image_pairs: List[ImagePair] = image_pairs or []
         self.current_pair_index = -1
         self.settings_file = settings_file
-        
+
         self.setup_ui()
         self.setup_connections()
-        
+
         # Set window properties
         self.setWindowTitle("Image Comparison Viewer")
         self.setGeometry(100, 100, 1200, 800)
@@ -514,21 +611,21 @@ class ComparisonWindow(QMainWindow):
                 background-color: #1e1e1e;
             }
         """)
-    
+
     def setup_ui(self):
         """Set up the user interface."""
         # Central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        
+
         # Main layout
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(10)
-        
+
         # Top controls
         controls_layout = QHBoxLayout()
-        
+
         self.load_button = QPushButton("Load Image Pair")
         self.load_button.setStyleSheet("""
             QPushButton {
@@ -546,7 +643,7 @@ class ComparisonWindow(QMainWindow):
                 background-color: #005a9e;
             }
         """)
-        
+
         self.reset_button = QPushButton("Reset View")
         self.reset_button.setStyleSheet("""
             QPushButton {
@@ -564,7 +661,7 @@ class ComparisonWindow(QMainWindow):
                 background-color: #555;
             }
         """)
-        
+
         self.settings_button = QPushButton("View Settings")
         self.settings_button.setStyleSheet("""
             QPushButton {
@@ -582,149 +679,166 @@ class ComparisonWindow(QMainWindow):
                 background-color: #1e7e34;
             }
         """)
-        
+
         controls_layout.addWidget(self.load_button)
         controls_layout.addWidget(self.reset_button)
         controls_layout.addWidget(self.settings_button)
         controls_layout.addStretch()
-        
+
         # Status label
         self.status_label = QLabel("No images loaded")
         self.status_label.setStyleSheet("color: #ccc; font-size: 12px;")
         controls_layout.addWidget(self.status_label)
-        
+
         main_layout.addLayout(controls_layout)
-        
+
         # Comparison viewer
         self.viewer = ComparisonViewer()
         main_layout.addWidget(self.viewer, 1)
-        
+
         # Thumbnail carousel
         self.carousel = ThumbnailCarousel()
         main_layout.addWidget(self.carousel)
-        
+
         # Load initial image pairs if provided
         if self.image_pairs:
             self.load_image_pairs(self.image_pairs)
-    
+
     def setup_connections(self):
         """Set up signal connections."""
         self.load_button.clicked.connect(self.load_image_pair)
         self.reset_button.clicked.connect(self.reset_view)
         self.settings_button.clicked.connect(self.view_settings)
         self.carousel.thumbnail_clicked.connect(self.load_image_pair_from_thumbnail)
-    
+
     def load_image_pairs(self, image_pairs: List[ImagePair]):
         """Load multiple image pairs."""
         self.image_pairs = image_pairs
         self.carousel.clear()
-        
+
         for image_pair in image_pairs:
             self.carousel.add_image_pair(image_pair)
-        
+
         if image_pairs:
             self.load_image_pair_from_thumbnail(image_pairs[0])
-        
+
         self.update_status()
-    
+
     def load_image_pair(self):
         """Load a pair of images."""
         # Load first image
         file1, _ = QFileDialog.getOpenFileName(
-            self, "Select First Image", "",
-            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.tif *.webp *.avif *.heic *.heif *.ico *.ppm *.ppm *.pgm *.pbm)"
+            self,
+            "Select First Image",
+            "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.tif *.webp *.avif *.heic *.heif *.ico *.ppm *.ppm *.pgm *.pbm)",
         )
-        
+
         if not file1:
             return
-        
+
         # Load second image
         file2, _ = QFileDialog.getOpenFileName(
-            self, "Select Second Image", "",
-            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.tif *.webp *.avif *.heic *.heif *.ico *.ppm *.ppm *.pgm *.pbm)"
+            self,
+            "Select Second Image",
+            "",
+            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.tif *.webp *.avif *.heic *.heif *.ico *.ppm *.ppm *.pgm *.pbm)",
         )
-        
+
         if not file2:
             return
-        
+
         # Create image pair
         image_pair = ImagePair(file1, file2)
         self.image_pairs.append(image_pair)
-        
+
         # Add to carousel
         self.carousel.add_image_pair(image_pair)
-        
+
         # Load into viewer
         self.load_image_pair_from_thumbnail(image_pair)
-        
+
         self.update_status()
-    
+
     def load_image_pair_from_thumbnail(self, image_pair: ImagePair):
         """Load an image pair from a thumbnail click."""
         self.viewer.set_image_pair(image_pair)
         self.current_pair_index = self.image_pairs.index(image_pair)
         self.update_status()
-    
+
     def reset_view(self):
         """Reset the viewer to fit images."""
         self.viewer.reset_view()
-    
+
     def update_status(self):
         """Update the status label."""
         if self.image_pairs:
-            current_pair = self.image_pairs[self.current_pair_index] if self.current_pair_index >= 0 else None
+            current_pair = (
+                self.image_pairs[self.current_pair_index]
+                if self.current_pair_index >= 0
+                else None
+            )
             if current_pair:
-                self.status_label.setText(f"Showing: {current_pair.name} "
-                                        f"({self.current_pair_index + 1}/{len(self.image_pairs)})")
+                self.status_label.setText(
+                    f"Showing: {current_pair.name} "
+                    f"({self.current_pair_index + 1}/{len(self.image_pairs)})"
+                )
             else:
                 self.status_label.setText(f"Loaded {len(self.image_pairs)} image pairs")
         else:
             self.status_label.setText("No images loaded")
-    
+
     def view_settings(self):
         """View compression settings."""
         if not self.settings_file or not self.settings_file.exists():
-            QMessageBox.information(self, "No Settings", "No compression settings file found.")
+            QMessageBox.information(
+                self, "No Settings", "No compression settings file found."
+            )
             return
-        
+
         try:
             from image_compression import load_compression_settings
+
             settings_data = load_compression_settings(self.settings_file)
-            
+
             if not settings_data:
-                QMessageBox.warning(self, "Error", "Failed to load compression settings.")
+                QMessageBox.warning(
+                    self, "Error", "Failed to load compression settings."
+                )
                 return
-            
+
             # Format settings for display
-            comp_settings = settings_data.get('compression_settings', {})
+            comp_settings = settings_data.get("compression_settings", {})
             settings_text = f"""
 Compression Settings:
 
-Quality: {comp_settings.get('quality', 'N/A')}%
-Max Largest Side: {comp_settings.get('max_largest_side', 'N/A')} px
-Max Smallest Side: {comp_settings.get('max_smallest_side', 'N/A')} px
-Output Format: {comp_settings.get('output_format', 'N/A')}
-Preserve Structure: {comp_settings.get('preserve_structure', 'N/A')}
+Quality: {comp_settings.get("quality", "N/A")}%
+Max Largest Side: {comp_settings.get("max_largest_side", "N/A")} px
+Max Smallest Side: {comp_settings.get("max_smallest_side", "N/A")} px
+Output Format: {comp_settings.get("output_format", "N/A")}
+Preserve Structure: {comp_settings.get("preserve_structure", "N/A")}
 
-Input Directory: {comp_settings.get('input_directory', 'N/A')}
-Output Directory: {comp_settings.get('output_directory', 'N/A')}
+Input Directory: {comp_settings.get("input_directory", "N/A")}
+Output Directory: {comp_settings.get("output_directory", "N/A")}
 
-Compression Date: {settings_data.get('compression_date', 'N/A')}
-Total Image Pairs: {settings_data.get('total_pairs', 'N/A')}
+Compression Date: {settings_data.get("compression_date", "N/A")}
+Total Image Pairs: {settings_data.get("total_pairs", "N/A")}
             """
-            
+
             QMessageBox.information(self, "Compression Settings", settings_text)
-            
+
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to view settings:\n\n{str(e)}")
 
 
-def show_comparison_window(image_pairs: List[ImagePair] = None, settings_file: Path = None):
+def show_comparison_window(
+    image_pairs: List[ImagePair] = None, settings_file: Path = None
+):
     """Show the comparison window with optional image pairs."""
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
-    
+
     window = ComparisonWindow(image_pairs, settings_file)
     window.show()
     return window
