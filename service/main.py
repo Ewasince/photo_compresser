@@ -68,7 +68,7 @@ class CompressionWorker(QThread):
             self.status_updated.emit("Starting compression...")
 
             # Process the directory
-            total_files, compressed_files, compressed_paths = self.compressor.process_directory(
+            total_files, compressed_files, compressed_paths, failed_files = self.compressor.process_directory(
                 self.input_dir, self.output_dir
             )
 
@@ -76,15 +76,24 @@ class CompressionWorker(QThread):
             stats = self.compressor.get_compression_stats(self.input_dir, self.output_dir)
             stats["total_files"] = total_files
             stats["compressed_files"] = compressed_files
+            stats["failed_files_count"] = len(failed_files)
 
             # Create image pairs for settings file
             image_pairs = create_image_pairs(self.output_dir, self.input_dir)
 
             # Save compression settings
-            if image_pairs:
-                save_compression_settings(self.output_dir, self.compression_settings, image_pairs, stats)
+            if image_pairs or failed_files:
+                save_compression_settings(
+                    self.output_dir,
+                    self.compression_settings,
+                    image_pairs,
+                    stats,
+                    failed_files,
+                )
 
-            self.status_updated.emit(f"Compression completed! {compressed_files}/{total_files} files compressed.")
+            self.status_updated.emit(
+                f"Compression completed! {compressed_files}/{total_files} files compressed. {len(failed_files)} failed."
+            )
             self.compression_finished.emit(stats)
 
         except Exception as e:

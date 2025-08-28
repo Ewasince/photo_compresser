@@ -258,7 +258,7 @@ class ImageCompressor:
             return ".avif"
         return ".jpg"  # Default fallback
 
-    def process_directory(self, input_root: Path, output_root: Path) -> tuple[int, int, list[Path]]:
+    def process_directory(self, input_root: Path, output_root: Path) -> tuple[int, int, list[Path], list[Path]]:
         """
         Process a directory recursively, compressing all supported images.
 
@@ -267,11 +267,12 @@ class ImageCompressor:
             output_root: Root output directory
 
         Returns:
-            Tuple of (total_files, compressed_files, compressed_paths)
+            Tuple of (total_files, compressed_files, compressed_paths, failed_files)
         """
         total_files = 0
         compressed_files = 0
         compressed_paths = []
+        failed_files: list[Path] = []
 
         # Ensure output directory exists
         output_root.mkdir(parents=True, exist_ok=True)
@@ -308,9 +309,10 @@ class ImageCompressor:
                     logger.info(f"Successfully compressed: {file_path.name}")
                 else:
                     logger.warning(f"Failed to compress: {file_path.name}")
+                    failed_files.append(file_path)
 
         logger.info(f"Compression complete: {compressed_files}/{total_files} files processed")
-        return total_files, compressed_files, compressed_paths
+        return total_files, compressed_files, compressed_paths, failed_files
 
     def get_compression_stats(self, input_dir: Path, output_dir: Path) -> dict[str, Any]:
         """Get compression statistics."""
@@ -417,6 +419,7 @@ def save_compression_settings(
     compression_settings: dict[str, Any],
     image_pairs: list[tuple[Path, Path]],
     stats: dict[str, Any],
+    failed_files: list[Path] | None = None,
 ) -> Path | None:
     """
     Save compression settings and image pairs to a JSON file.
@@ -425,9 +428,12 @@ def save_compression_settings(
         output_dir: Directory where to save the settings file
         compression_settings: Dictionary with compression parameters
         image_pairs: List of image pairs for comparison
+        failed_files: List of image paths that failed to compress
     """
     import json
     from datetime import datetime
+
+    failed_files = failed_files or []
 
     settings_data = {
         "compression_settings": compression_settings,
@@ -442,6 +448,7 @@ def save_compression_settings(
             for original_path, compressed_path in image_pairs
         ],
         "total_pairs": len(image_pairs),
+        "failed_files": [str(path) for path in failed_files],
         "stats": stats,
     }
 
