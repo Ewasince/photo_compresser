@@ -14,7 +14,7 @@
 - Lint: `make lint.ruff`
 - Type-check: `make lint.mypy`
 - Tests: `make test.pytest`
-- Lint + Type-check + pre-commit commands: `pre-commit-all`
+- Lint + Type-check + pre-commit commands: `make pre-commit-all`
 
 ## Git instructions
 - Commit message format: `<type>[optional scope]: <description>`
