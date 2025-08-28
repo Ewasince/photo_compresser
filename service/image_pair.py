@@ -84,10 +84,13 @@ def _load_preview(path: str, size: QSize) -> QPixmap:
         return pix.scaled(size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
     reader = QImageReader(path)
     reader.setAutoTransform(True)
-    if size.width() > 0 and size.height() > 0:
-        reader.setScaledSize(size)
+    orig_size = reader.size()
+    if orig_size.width() > 0 and orig_size.height() > 0:
+        scale = min(size.width() / orig_size.width(), size.height() / orig_size.height())
+        if scale < 1.0:
+            reader.setScaledSize(QSize(int(orig_size.width() * scale), int(orig_size.height() * scale)))
     image = reader.read()
-    pix = QPixmap(path) if image.isNull() else QPixmap.fromImage(image)
+    pix = QPixmap.fromImage(image) if not image.isNull() else QPixmap(path)
     return pix.scaled(size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
 
 
