@@ -41,6 +41,12 @@ from service.image_compression import (
     create_image_pairs,
     save_compression_settings,
 )
+from service.parameters_defaults import (
+    AVIF_DEFAULTS,
+    BASIC_DEFAULTS,
+    JPEG_DEFAULTS,
+    WEBP_DEFAULTS,
+)
 
 
 class CollapsibleBox(QWidget):
@@ -258,7 +264,7 @@ class MainWindow(QMainWindow):
         self.basic_layout.addWidget(QLabel("Quality:"), 0, 0)
         self.quality_spinbox = QSpinBox()
         self.quality_spinbox.setRange(1, 100)
-        self.quality_spinbox.setValue(75)
+        self.quality_spinbox.setValue(BASIC_DEFAULTS["quality"])
         self.quality_spinbox.setSuffix("%")
         self.quality_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
         self.quality_spinbox.setToolTip("Quality level (1-100). Lower values = stronger compression, smaller files")
@@ -266,12 +272,12 @@ class MainWindow(QMainWindow):
 
         # Max largest side
         self.max_largest_checkbox = QCheckBox("Max Largest Side:")
-        self.max_largest_checkbox.setChecked(True)
+        self.max_largest_checkbox.setChecked(BASIC_DEFAULTS["max_largest_enabled"])
         self.max_largest_checkbox.setToolTip("Enable maximum size limit for the largest side")
         self.basic_layout.addWidget(self.max_largest_checkbox, 1, 0)
         self.max_largest_spinbox = QSpinBox()
         self.max_largest_spinbox.setRange(100, 10000)
-        self.max_largest_spinbox.setValue(1920)
+        self.max_largest_spinbox.setValue(BASIC_DEFAULTS["max_largest_side"])
         self.max_largest_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
         self.max_largest_spinbox.setToolTip("Maximum size of the largest side in pixels")
         self.max_largest_checkbox.toggled.connect(self.max_largest_spinbox.setEnabled)
@@ -280,12 +286,12 @@ class MainWindow(QMainWindow):
 
         # Max smallest side
         self.max_smallest_checkbox = QCheckBox("Max Smallest Side:")
-        self.max_smallest_checkbox.setChecked(True)
+        self.max_smallest_checkbox.setChecked(BASIC_DEFAULTS["max_smallest_enabled"])
         self.max_smallest_checkbox.setToolTip("Enable maximum size limit for the smallest side")
         self.basic_layout.addWidget(self.max_smallest_checkbox, 2, 0)
         self.max_smallest_spinbox = QSpinBox()
         self.max_smallest_spinbox.setRange(100, 10000)
-        self.max_smallest_spinbox.setValue(1080)
+        self.max_smallest_spinbox.setValue(BASIC_DEFAULTS["max_smallest_side"])
         self.max_smallest_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
         self.max_smallest_spinbox.setToolTip("Maximum size of the smallest side in pixels")
         self.max_smallest_checkbox.toggled.connect(self.max_smallest_spinbox.setEnabled)
@@ -296,13 +302,14 @@ class MainWindow(QMainWindow):
         self.basic_layout.addWidget(QLabel("Output Format:"), 3, 0)
         self.format_combo = QComboBox()
         self.format_combo.addItems(["JPEG", "WebP", "AVIF"])
+        self.format_combo.setCurrentText(BASIC_DEFAULTS["output_format"])
         self.format_combo.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
         self.format_combo.setToolTip("Output image format")
         self.basic_layout.addWidget(self.format_combo, 3, 1)
 
         # Preserve original structure
         self.preserve_structure_checkbox = QCheckBox("Preserve folder structure")
-        self.preserve_structure_checkbox.setChecked(True)
+        self.preserve_structure_checkbox.setChecked(BASIC_DEFAULTS["preserve_structure"])
         self.preserve_structure_checkbox.setToolTip(
             "Keep original folder structure or flatten all files to output directory"
         )
@@ -445,7 +452,7 @@ class MainWindow(QMainWindow):
         # Progressive
         jpeg_layout.addWidget(QLabel("Progressive:"), 0, 0)
         self.jpeg_progressive = QCheckBox()
-        self.jpeg_progressive.setChecked(False)
+        self.jpeg_progressive.setChecked(JPEG_DEFAULTS["progressive"])
         self.jpeg_progressive.setToolTip("Progressive JPEG encoding. Sometimes reduces file size")
         jpeg_layout.addWidget(self.jpeg_progressive, 0, 1)
 
@@ -453,14 +460,14 @@ class MainWindow(QMainWindow):
         jpeg_layout.addWidget(QLabel("Subsampling:"), 1, 0)
         self.jpeg_subsampling = QComboBox()
         self.jpeg_subsampling.addItems(["Auto (-1)", "4:4:4 (0)", "4:2:2 (1)", "4:2:0 (2)"])
-        self.jpeg_subsampling.setCurrentText("Auto (-1)")
+        self.jpeg_subsampling.setCurrentText(JPEG_DEFAULTS["subsampling"])
         self.jpeg_subsampling.setToolTip("Color subsampling. 4:4:4 = best quality, 4:2:0 = best compression")
         jpeg_layout.addWidget(self.jpeg_subsampling, 1, 1)
 
         # Optimize
         jpeg_layout.addWidget(QLabel("Optimize:"), 2, 0)
         self.jpeg_optimize = QCheckBox()
-        self.jpeg_optimize.setChecked(False)
+        self.jpeg_optimize.setChecked(JPEG_DEFAULTS["optimize"])
         self.jpeg_optimize.setToolTip("Huffman optimization for better compression")
         jpeg_layout.addWidget(self.jpeg_optimize, 2, 1)
 
@@ -468,14 +475,14 @@ class MainWindow(QMainWindow):
         jpeg_layout.addWidget(QLabel("Smooth:"), 3, 0)
         self.jpeg_smooth = QSpinBox()
         self.jpeg_smooth.setRange(0, 100)
-        self.jpeg_smooth.setValue(0)
+        self.jpeg_smooth.setValue(JPEG_DEFAULTS["smooth"])
         self.jpeg_smooth.setToolTip("Light smoothing (0-100). Reduces noise for better compression")
         jpeg_layout.addWidget(self.jpeg_smooth, 3, 1)
 
         # Keep RGB
         jpeg_layout.addWidget(QLabel("Keep RGB:"), 4, 0)
         self.jpeg_keep_rgb = QCheckBox()
-        self.jpeg_keep_rgb.setChecked(False)
+        self.jpeg_keep_rgb.setChecked(JPEG_DEFAULTS["keep_rgb"])
         self.jpeg_keep_rgb.setToolTip("Save in RGB instead of YCbCr. May increase size but removes color transitions")
         jpeg_layout.addWidget(self.jpeg_keep_rgb, 4, 1)
 
@@ -497,7 +504,7 @@ class MainWindow(QMainWindow):
         # Lossless
         webp_layout.addWidget(QLabel("Lossless:"), 0, 0)
         self.webp_lossless = QCheckBox()
-        self.webp_lossless.setChecked(False)
+        self.webp_lossless.setChecked(WEBP_DEFAULTS["lossless"])
         self.webp_lossless.setToolTip("Lossless compression. Radically changes compression method")
         webp_layout.addWidget(self.webp_lossless, 0, 1)
 
@@ -505,7 +512,7 @@ class MainWindow(QMainWindow):
         webp_layout.addWidget(QLabel("Method:"), 1, 0)
         self.webp_method = QSpinBox()
         self.webp_method.setRange(0, 6)
-        self.webp_method.setValue(4)
+        self.webp_method.setValue(WEBP_DEFAULTS["method"])
         self.webp_method.setToolTip("Compression method (0-6). Slower = better compression at same quality")
         webp_layout.addWidget(self.webp_method, 1, 1)
 
@@ -513,14 +520,14 @@ class MainWindow(QMainWindow):
         webp_layout.addWidget(QLabel("Alpha Quality:"), 2, 0)
         self.webp_alpha_quality = QSpinBox()
         self.webp_alpha_quality.setRange(0, 100)
-        self.webp_alpha_quality.setValue(100)
+        self.webp_alpha_quality.setValue(WEBP_DEFAULTS["alpha_quality"])
         self.webp_alpha_quality.setToolTip("Quality of alpha channel in lossy mode")
         webp_layout.addWidget(self.webp_alpha_quality, 2, 1)
 
         # Exact
         webp_layout.addWidget(QLabel("Exact:"), 3, 0)
         self.webp_exact = QCheckBox()
-        self.webp_exact.setChecked(False)
+        self.webp_exact.setChecked(WEBP_DEFAULTS["exact"])
         self.webp_exact.setToolTip("Save RGB under transparency. Increases size but improves quality")
         webp_layout.addWidget(self.webp_exact, 3, 1)
         self.advanced_box.add_widget(self.webp_group)
@@ -542,7 +549,7 @@ class MainWindow(QMainWindow):
         avif_layout.addWidget(QLabel("Subsampling:"), 0, 0)
         self.avif_subsampling = QComboBox()
         self.avif_subsampling.addItems(["4:2:0", "4:2:2", "4:4:4", "4:0:0"])
-        self.avif_subsampling.setCurrentText("4:2:0")
+        self.avif_subsampling.setCurrentText(AVIF_DEFAULTS["subsampling"])
         self.avif_subsampling.setToolTip("Color subsampling. 4:4:4 = best quality, 4:2:0 = best compression")
         avif_layout.addWidget(self.avif_subsampling, 0, 1)
 
@@ -550,7 +557,7 @@ class MainWindow(QMainWindow):
         avif_layout.addWidget(QLabel("Speed:"), 1, 0)
         self.avif_speed = QSpinBox()
         self.avif_speed.setRange(0, 10)
-        self.avif_speed.setValue(6)
+        self.avif_speed.setValue(AVIF_DEFAULTS["speed"])
         self.avif_speed.setToolTip("Encoding speed (0-10). 0 = slower/better, 10 = faster/worse")
         avif_layout.addWidget(self.avif_speed, 1, 1)
 
@@ -558,7 +565,7 @@ class MainWindow(QMainWindow):
         avif_layout.addWidget(QLabel("Codec:"), 2, 0)
         self.avif_codec = QComboBox()
         self.avif_codec.addItems(["auto", "aom", "rav1e", "svt"])
-        self.avif_codec.setCurrentText("auto")
+        self.avif_codec.setCurrentText(AVIF_DEFAULTS["codec"])
         self.avif_codec.setToolTip("AV1 encoder to use (if available)")
         avif_layout.addWidget(self.avif_codec, 2, 1)
 
@@ -566,7 +573,7 @@ class MainWindow(QMainWindow):
         avif_layout.addWidget(QLabel("Range:"), 3, 0)
         self.avif_range = QComboBox()
         self.avif_range.addItems(["full", "limited"])
-        self.avif_range.setCurrentText("full")
+        self.avif_range.setCurrentText(AVIF_DEFAULTS["range"])
         self.avif_range.setToolTip("Tonal range")
         avif_layout.addWidget(self.avif_range, 3, 1)
 
@@ -574,7 +581,7 @@ class MainWindow(QMainWindow):
         avif_layout.addWidget(QLabel("QMin:"), 4, 0)
         self.avif_qmin = QSpinBox()
         self.avif_qmin.setRange(-1, 63)
-        self.avif_qmin.setValue(-1)
+        self.avif_qmin.setValue(AVIF_DEFAULTS["qmin"])
         self.avif_qmin.setToolTip("Minimum quantizer (-1 = auto, 0-63 = hard lower bound)")
         avif_layout.addWidget(self.avif_qmin, 4, 1)
 
@@ -582,14 +589,14 @@ class MainWindow(QMainWindow):
         avif_layout.addWidget(QLabel("QMax:"), 5, 0)
         self.avif_qmax = QSpinBox()
         self.avif_qmax.setRange(-1, 63)
-        self.avif_qmax.setValue(-1)
+        self.avif_qmax.setValue(AVIF_DEFAULTS["qmax"])
         self.avif_qmax.setToolTip("Maximum quantizer (-1 = auto, 0-63 = upper bound)")
         avif_layout.addWidget(self.avif_qmax, 5, 1)
 
         # Auto Tiling
         avif_layout.addWidget(QLabel("Auto Tiling:"), 6, 0)
         self.avif_autotiling = QCheckBox()
-        self.avif_autotiling.setChecked(True)
+        self.avif_autotiling.setChecked(AVIF_DEFAULTS["autotiling"])
         self.avif_autotiling.setToolTip("Automatic tiling for better decoding speed")
         avif_layout.addWidget(self.avif_autotiling, 6, 1)
 
@@ -597,7 +604,7 @@ class MainWindow(QMainWindow):
         avif_layout.addWidget(QLabel("Tile Rows (log2):"), 7, 0)
         self.avif_tile_rows = QSpinBox()
         self.avif_tile_rows.setRange(0, 6)
-        self.avif_tile_rows.setValue(0)
+        self.avif_tile_rows.setValue(AVIF_DEFAULTS["tile_rows"])
         self.avif_tile_rows.setToolTip("Explicit tile rows (if auto tiling = false)")
         avif_layout.addWidget(self.avif_tile_rows, 7, 1)
 
@@ -605,7 +612,7 @@ class MainWindow(QMainWindow):
         avif_layout.addWidget(QLabel("Tile Cols (log2):"), 8, 0)
         self.avif_tile_cols = QSpinBox()
         self.avif_tile_cols.setRange(0, 6)
-        self.avif_tile_cols.setValue(0)
+        self.avif_tile_cols.setValue(AVIF_DEFAULTS["tile_cols"])
         self.avif_tile_cols.setToolTip("Explicit tile columns (if auto tiling = false)")
         avif_layout.addWidget(self.avif_tile_cols, 8, 1)
         self.advanced_box.add_widget(self.avif_group)
@@ -663,39 +670,39 @@ class MainWindow(QMainWindow):
     def reset_settings(self) -> None:
         """Reset all compression settings to their default values."""
         # Basic settings
-        self.quality_spinbox.setValue(75)
-        self.max_largest_checkbox.setChecked(True)
-        self.max_largest_spinbox.setValue(1920)
-        self.max_largest_spinbox.setEnabled(True)
-        self.max_smallest_checkbox.setChecked(True)
-        self.max_smallest_spinbox.setValue(1080)
-        self.max_smallest_spinbox.setEnabled(True)
-        self.format_combo.setCurrentText("JPEG")
-        self.preserve_structure_checkbox.setChecked(True)
+        self.quality_spinbox.setValue(BASIC_DEFAULTS["quality"])
+        self.max_largest_checkbox.setChecked(BASIC_DEFAULTS["max_largest_enabled"])
+        self.max_largest_spinbox.setValue(BASIC_DEFAULTS["max_largest_side"])
+        self.max_largest_spinbox.setEnabled(BASIC_DEFAULTS["max_largest_enabled"])
+        self.max_smallest_checkbox.setChecked(BASIC_DEFAULTS["max_smallest_enabled"])
+        self.max_smallest_spinbox.setValue(BASIC_DEFAULTS["max_smallest_side"])
+        self.max_smallest_spinbox.setEnabled(BASIC_DEFAULTS["max_smallest_enabled"])
+        self.format_combo.setCurrentText(BASIC_DEFAULTS["output_format"])
+        self.preserve_structure_checkbox.setChecked(BASIC_DEFAULTS["preserve_structure"])
 
         # JPEG specific
-        self.jpeg_progressive.setChecked(False)
-        self.jpeg_subsampling.setCurrentText("Auto (-1)")
-        self.jpeg_optimize.setChecked(False)
-        self.jpeg_smooth.setValue(0)
-        self.jpeg_keep_rgb.setChecked(False)
+        self.jpeg_progressive.setChecked(JPEG_DEFAULTS["progressive"])
+        self.jpeg_subsampling.setCurrentText(JPEG_DEFAULTS["subsampling"])
+        self.jpeg_optimize.setChecked(JPEG_DEFAULTS["optimize"])
+        self.jpeg_smooth.setValue(JPEG_DEFAULTS["smooth"])
+        self.jpeg_keep_rgb.setChecked(JPEG_DEFAULTS["keep_rgb"])
 
         # WebP specific
-        self.webp_lossless.setChecked(False)
-        self.webp_method.setValue(4)
-        self.webp_alpha_quality.setValue(100)
-        self.webp_exact.setChecked(False)
+        self.webp_lossless.setChecked(WEBP_DEFAULTS["lossless"])
+        self.webp_method.setValue(WEBP_DEFAULTS["method"])
+        self.webp_alpha_quality.setValue(WEBP_DEFAULTS["alpha_quality"])
+        self.webp_exact.setChecked(WEBP_DEFAULTS["exact"])
 
         # AVIF specific
-        self.avif_subsampling.setCurrentText("4:2:0")
-        self.avif_speed.setValue(6)
-        self.avif_codec.setCurrentText("auto")
-        self.avif_range.setCurrentText("full")
-        self.avif_qmin.setValue(-1)
-        self.avif_qmax.setValue(-1)
-        self.avif_autotiling.setChecked(True)
-        self.avif_tile_rows.setValue(0)
-        self.avif_tile_cols.setValue(0)
+        self.avif_subsampling.setCurrentText(AVIF_DEFAULTS["subsampling"])
+        self.avif_speed.setValue(AVIF_DEFAULTS["speed"])
+        self.avif_codec.setCurrentText(AVIF_DEFAULTS["codec"])
+        self.avif_range.setCurrentText(AVIF_DEFAULTS["range"])
+        self.avif_qmin.setValue(AVIF_DEFAULTS["qmin"])
+        self.avif_qmax.setValue(AVIF_DEFAULTS["qmax"])
+        self.avif_autotiling.setChecked(AVIF_DEFAULTS["autotiling"])
+        self.avif_tile_rows.setValue(AVIF_DEFAULTS["tile_rows"])
+        self.avif_tile_cols.setValue(AVIF_DEFAULTS["tile_cols"])
 
         # Update UI state
         self.update_format_specific_settings()
