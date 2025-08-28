@@ -260,7 +260,7 @@ class MainWindow(QMainWindow):
 
         # Reset settings button at top of settings panel
         header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setContentsMargins(0, 0, 10, 0)
         header_layout.addStretch()
         self.reset_btn = QPushButton("Reset Settings")
         self.reset_btn.setStyleSheet("""
