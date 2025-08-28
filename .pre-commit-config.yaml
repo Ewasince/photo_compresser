@@ -1,0 +1,57 @@
+exclude: ".git"
+fail_fast: false
+
+repos:
+  - repo: local
+    hooks:
+      - id: end-of-file-fixer
+        name: Fix End of Files
+        description: Ensures that a file is either empty, or ends with one newline.
+        entry: end-of-file-fixer
+        language: system
+        types: [text]
+        stages: [pre-commit, pre-push, manual]
+        files: '\.py$'
+
+      - id: mixed-line-ending
+        name: Mixed line ending
+        description: Replaces or checks mixed line ending
+        entry: mixed-line-ending
+        language: system
+        types: [text]
+        files: '\.py$'
+
+      - id: trailing-whitespace
+        name: Trim Trailing Whitespace
+        description: This hook trims trailing whitespace.
+        entry: trailing-whitespace-fixer
+        language: system
+        types: [text]
+        stages: [pre-commit, pre-push, manual]
+        files: '\.py$'
+
+      - id: ruff-linter
+        name: ruff-linter
+        entry: ruff check
+        language: system
+        types_or: [python, pyi, jupyter]
+        args: [--fix]
+        files: '\.py$'
+
+      - id: ruff-format
+        name: ruff-format
+        description: A formatter for Python files.
+        entry: ruff format
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
+        files: '\.py$'
+
+      - id: mypy
+        name: mypy
+        description: Python type checker
+        entry: mypy
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+        files: '\.py$'
