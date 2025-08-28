@@ -20,6 +20,7 @@ from PyQt6.QtGui import (
     QPaintEvent,
     QPen,
     QPixmap,
+    QResizeEvent,
     QWheelEvent,
 )
 from PyQt6.QtWidgets import (
@@ -443,9 +444,6 @@ class ThumbnailWidget(QWidget):
         self.thumbnail_size = QSize(100, 100)
         self._thumbnail: QPixmap | None = None
         self._is_loading = False
-        self._spinner_angle = 0
-        self._spinner_timer = QTimer(self)
-        self._spinner_timer.timeout.connect(self._advance_spinner)
 
         self.setStyleSheet("""
             QWidget {
@@ -460,12 +458,11 @@ class ThumbnailWidget(QWidget):
             }
         """)
 
-    def _advance_spinner(self) -> None:
-        self._spinner_angle = (self._spinner_angle + 30) % 360
-        self.update()
-
-    def _load_thumbnail(self) -> None:
-        """Load the thumbnail in a worker thread."""
+    def start_loading(self) -> None:
+        """Begin loading the thumbnail if not already in progress."""
+        if self._is_loading or self._thumbnail is not None:
+            return
+        self._is_loading = True
 
         def handle_result(fut: Future[QImage]) -> None:
             image = fut.result()
@@ -477,7 +474,6 @@ class ThumbnailWidget(QWidget):
     def _set_thumbnail(self, pixmap: QPixmap) -> None:
         self._thumbnail = pixmap
         self._is_loading = False
-        self._spinner_timer.stop()
         self.update()
 
     def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: ARG002
@@ -488,23 +484,7 @@ class ThumbnailWidget(QWidget):
         available_height = self.height() - label_height
 
         if self._thumbnail is None:
-            if not self._is_loading:
-                self._is_loading = True
-                self._spinner_timer.start(100)
-                self._load_thumbnail()
-            radius = 15
-            center = self.rect().center()
-            pen = QPen(QColor(200, 200, 200))
-            pen.setWidth(3)
-            painter.setPen(pen)
-            painter.drawArc(
-                center.x() - radius,
-                center.y() - radius,
-                radius * 2,
-                radius * 2,
-                self._spinner_angle * 16,
-                120 * 16,
-            )
+            painter.fillRect(QRect(10, 10, self.thumbnail_size.width(), available_height - 20), QColor(80, 80, 80))
         else:
             x = (self.width() - self._thumbnail.width()) // 2
             y = (available_height - self._thumbnail.height()) // 2
@@ -570,11 +550,16 @@ class ThumbnailCarousel(QScrollArea):
             }
         """)
 
+        scroll_bar = self.horizontalScrollBar()
+        if scroll_bar is not None:
+            scroll_bar.valueChanged.connect(self.load_visible_thumbnails)
+
     def add_image_pair(self, image_pair: ImagePair) -> None:
         """Add an image pair thumbnail to the carousel."""
         thumbnail = ThumbnailWidget(image_pair)
         thumbnail.clicked.connect(self.thumbnail_clicked.emit)
         self.container_layout.addWidget(thumbnail)
+        self.load_visible_thumbnails()
 
     def clear(self) -> None:
         """Clear all thumbnails."""
@@ -584,6 +569,28 @@ class ThumbnailCarousel(QScrollArea):
                 widget = child.widget()
                 if widget is not None:
                     widget.deleteLater()
+
+    def resizeEvent(self, event: QResizeEvent | None) -> None:
+        super().resizeEvent(event)
+        self.load_visible_thumbnails()
+
+    def load_visible_thumbnails(self) -> None:
+        """Start loading thumbnails that are visible in the viewport."""
+        viewport_widget = self.viewport()
+        if viewport_widget is None:
+            return
+        viewport_rect = viewport_widget.rect()
+        for i in range(self.container_layout.count()):
+            item = self.container_layout.itemAt(i)
+            if item is None:
+                continue
+            widget = item.widget()
+            if not isinstance(widget, ThumbnailWidget):
+                continue
+            top_left = widget.mapTo(viewport_widget, QPoint(0, 0))
+            widget_rect = QRect(top_left, widget.size())
+            if widget_rect.intersects(viewport_rect):
+                widget.start_loading()
 
 
 class CompressionStatsDialog(QDialog):
