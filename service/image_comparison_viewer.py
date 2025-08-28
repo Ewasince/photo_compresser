@@ -6,9 +6,10 @@ A PyQt6 application for comparing pairs of images with interactive features.
 
 import json
 import sys
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from PyQt6.QtCore import QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
@@ -429,6 +430,8 @@ class ComparisonViewer(QWidget):
 class ThumbnailWidget(QWidget):
     """Widget for displaying a thumbnail in the carousel."""
 
+    _executor: ClassVar[ThreadPoolExecutor] = ThreadPoolExecutor(max_workers=4)
+
     clicked = pyqtSignal(ImagePair)
 
     def __init__(self, image_pair: ImagePair, parent: QWidget | None = None) -> None:
@@ -461,7 +464,17 @@ class ThumbnailWidget(QWidget):
         self.update()
 
     def _load_thumbnail(self) -> None:
-        self._thumbnail = self.image_pair.create_thumbnail(self.thumbnail_size)
+        """Load the thumbnail in a worker thread."""
+
+        def handle_result(fut: Future[QPixmap]) -> None:
+            pixmap = fut.result()
+            QTimer.singleShot(0, lambda: self._set_thumbnail(pixmap))
+
+        future = self._executor.submit(self.image_pair.create_thumbnail, self.thumbnail_size)
+        future.add_done_callback(handle_result)
+
+    def _set_thumbnail(self, pixmap: QPixmap) -> None:
+        self._thumbnail = pixmap
         self._is_loading = False
         self._spinner_timer.stop()
         self.update()
@@ -477,7 +490,7 @@ class ThumbnailWidget(QWidget):
             if not self._is_loading:
                 self._is_loading = True
                 self._spinner_timer.start(100)
-                QTimer.singleShot(10, self._load_thumbnail)
+                self._load_thumbnail()
             radius = 15
             center = self.rect().center()
             pen = QPen(QColor(200, 200, 200))
