@@ -30,8 +30,8 @@ class ImageCompressor:
     def __init__(
         self,
         quality: int = 85,
-        max_largest_side: int = 1920,
-        max_smallest_side: int = 1080,
+        max_largest_side: int | None = 1920,
+        max_smallest_side: int | None = 1080,
         preserve_structure: bool = True,
         output_format: str = "JPEG",
     ):
@@ -40,8 +40,8 @@ class ImageCompressor:
 
         Args:
             quality: JPEG/WebP/AVIF quality (1-100)
-            max_largest_side: Maximum size of the largest side in pixels
-            max_smallest_side: Maximum size of the smallest side in pixels
+            max_largest_side: Maximum size of the largest side in pixels. If None, no limit.
+            max_smallest_side: Maximum size of the smallest side in pixels. If None, no limit.
             preserve_structure: Whether to preserve folder structure
             output_format: Output format ('JPEG', 'WebP', 'AVIF')
         """
@@ -77,7 +77,11 @@ class ImageCompressor:
                 smallest_side = min(width, height)
 
                 # Check if image needs resizing
-                needs_resize = largest_side > self.max_largest_side or smallest_side > self.max_smallest_side
+                needs_resize = False
+                if self.max_largest_side is not None and largest_side > self.max_largest_side:
+                    needs_resize = True
+                if self.max_smallest_side is not None and smallest_side > self.max_smallest_side:
+                    needs_resize = True
 
                 # Check if image needs quality compression (for all formats)
                 needs_quality_compression = True  # Always recompress to ensure quality settings
@@ -109,13 +113,13 @@ class ImageCompressor:
                 # Determine if resizing is needed
                 new_width, new_height = width, height
 
-                if largest_side > self.max_largest_side:
+                if self.max_largest_side is not None and largest_side > self.max_largest_side:
                     # Scale down proportionally
                     scale_factor = self.max_largest_side / largest_side
                     new_width = int(width * scale_factor)
                     new_height = int(height * scale_factor)
 
-                if smallest_side > self.max_smallest_side:
+                if self.max_smallest_side is not None and smallest_side > self.max_smallest_side:
                     # Check if we need to scale down further
                     current_smallest = min(new_width, new_height)
                     if current_smallest > self.max_smallest_side:

@@ -6,8 +6,19 @@ Provides functionality for comparing pairs of images with interactive features.
 
 import sys
 from pathlib import Path
+from typing import cast
 
-from PyQt6.QtCore import QPoint, QRect, QSize, Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import (
+    QObject,
+    QPoint,
+    QRect,
+    QRunnable,
+    QSize,
+    Qt,
+    QThreadPool,
+    QTimer,
+    pyqtSignal,
+)
 from PyQt6.QtGui import (
     QColor,
     QMouseEvent,
@@ -32,6 +43,8 @@ from PyQt6.QtWidgets import (
 
 from service.constants import SUPPORTED_EXTENSIONS
 from service.image_pair import ImagePair
+
+_THUMB_POOL = cast(QThreadPool, QThreadPool.globalInstance())
 
 FORMATS_PATTERNS = " ".join(f"*.{f}" for f in SUPPORTED_EXTENSIONS)
 FORMATS_PATTERN = f"Images ({FORMATS_PATTERNS})"
@@ -390,17 +403,18 @@ class ComparisonViewer(QWidget):
         )
 
 
-class _ThumbLoadThread(QThread):
-    """Background loader for thumbnails to keep UI responsive."""
+class _ThumbLoadTask(QRunnable, QObject):
+    """Background task for loading thumbnails without spawning many threads."""
 
     loaded = pyqtSignal(QPixmap)
 
     def __init__(self, pair: ImagePair, size: QSize) -> None:
-        super().__init__()
+        QObject.__init__(self)
+        QRunnable.__init__(self)
         self.pair = pair
         self.size = size
 
-    def run(self) -> None:
+    def run(self) -> None:  # pragma: no cover - executed in thread pool
         thumb = self.pair.create_thumbnail(self.size)
         self.loaded.emit(thumb)
 
@@ -419,7 +433,7 @@ class ThumbnailWidget(QWidget):
         self._angle = 0
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._advance_spinner)
-        self._loader: _ThumbLoadThread | None = None
+        self._task: _ThumbLoadTask | None = None
         self._loading = False
 
         self.setStyleSheet("""
@@ -444,7 +458,7 @@ class ThumbnailWidget(QWidget):
 
     def _on_loaded(self, _pix: QPixmap) -> None:
         self._loading = False
-        self._loader = None
+        self._task = None
         self.update()
 
     def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: ARG002
@@ -455,9 +469,9 @@ class ThumbnailWidget(QWidget):
             if not self._loading:
                 self._loading = True
                 self._timer.start(100)
-                self._loader = _ThumbLoadThread(self.image_pair, self.thumbnail_size)
-                self._loader.loaded.connect(self._on_loaded)
-                self._loader.start()
+                self._task = _ThumbLoadTask(self.image_pair, self.thumbnail_size)
+                self._task.loaded.connect(self._on_loaded)
+                _THUMB_POOL.start(self._task)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             radius = min(self.width(), self.height()) // 4
             painter.translate(self.width() // 2, self.height() // 2)

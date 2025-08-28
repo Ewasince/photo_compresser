@@ -27,12 +27,12 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QSpinBox,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from service.file_utils import format_timedelta
-from service.image_comparison import ImagePair, show_comparison_window
 
 # Import our modules
 from service.image_compression import (
@@ -40,6 +40,41 @@ from service.image_compression import (
     create_image_pairs,
     save_compression_settings,
 )
+
+
+class CollapsibleBox(QWidget):
+    """A simple collapsible panel widget."""
+
+    def __init__(self, title: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+
+        self.toggle_button = QToolButton()
+        self.toggle_button.setText(title)
+        self.toggle_button.setCheckable(True)
+        self.toggle_button.setChecked(False)
+        self.toggle_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.toggle_button.setArrowType(Qt.ArrowType.RightArrow)
+        self.toggle_button.setStyleSheet("QToolButton { border: none; }")
+
+        self.content = QWidget()
+        self.content.setVisible(False)
+        self.content_layout = QVBoxLayout(self.content)
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.toggle_button)
+        layout.addWidget(self.content)
+
+        self.toggle_button.clicked.connect(self._on_clicked)
+
+    def _on_clicked(self) -> None:
+        expanded = self.toggle_button.isChecked()
+        self.toggle_button.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
+        self.content.setVisible(expanded)
+
+    def add_widget(self, widget: QWidget) -> None:
+        self.content_layout.addWidget(widget)
 
 
 class CompressionWorker(QThread):
@@ -229,21 +264,31 @@ class MainWindow(QMainWindow):
         self.basic_layout.addWidget(self.quality_spinbox, 0, 1)
 
         # Max largest side
-        self.basic_layout.addWidget(QLabel("Max Largest Side:"), 1, 0)
+        self.max_largest_checkbox = QCheckBox("Max Largest Side:")
+        self.max_largest_checkbox.setChecked(True)
+        self.max_largest_checkbox.setToolTip("Enable maximum size limit for the largest side")
+        self.basic_layout.addWidget(self.max_largest_checkbox, 1, 0)
         self.max_largest_spinbox = QSpinBox()
         self.max_largest_spinbox.setRange(100, 10000)
         self.max_largest_spinbox.setValue(1920)
         self.max_largest_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
         self.max_largest_spinbox.setToolTip("Maximum size of the largest side in pixels")
+        self.max_largest_checkbox.toggled.connect(self.max_largest_spinbox.setEnabled)
+        self.max_largest_spinbox.setEnabled(self.max_largest_checkbox.isChecked())
         self.basic_layout.addWidget(self.max_largest_spinbox, 1, 1)
 
         # Max smallest side
-        self.basic_layout.addWidget(QLabel("Max Smallest Side:"), 2, 0)
+        self.max_smallest_checkbox = QCheckBox("Max Smallest Side:")
+        self.max_smallest_checkbox.setChecked(True)
+        self.max_smallest_checkbox.setToolTip("Enable maximum size limit for the smallest side")
+        self.basic_layout.addWidget(self.max_smallest_checkbox, 2, 0)
         self.max_smallest_spinbox = QSpinBox()
         self.max_smallest_spinbox.setRange(100, 10000)
         self.max_smallest_spinbox.setValue(1080)
         self.max_smallest_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
         self.max_smallest_spinbox.setToolTip("Maximum size of the smallest side in pixels")
+        self.max_smallest_checkbox.toggled.connect(self.max_smallest_spinbox.setEnabled)
+        self.max_smallest_spinbox.setEnabled(self.max_smallest_checkbox.isChecked())
         self.basic_layout.addWidget(self.max_smallest_spinbox, 2, 1)
 
         # Output format
@@ -263,6 +308,9 @@ class MainWindow(QMainWindow):
         self.basic_layout.addWidget(self.preserve_structure_checkbox, 4, 0, 1, 2)
 
         self.settings_layout.addWidget(self.basic_group)
+
+        self.advanced_box = CollapsibleBox("Advanced Settings")
+        self.settings_layout.addWidget(self.advanced_box)
 
         # Format-specific settings groups
         self.create_format_specific_settings()
@@ -331,7 +379,6 @@ class MainWindow(QMainWindow):
                 background-color: #6c757d;
             }
         """)
-        self.compare_btn.setEnabled(False)
 
         button_layout.addWidget(self.compress_btn)
         button_layout.addWidget(self.compare_btn)
@@ -410,7 +457,7 @@ class MainWindow(QMainWindow):
         self.jpeg_keep_rgb.setToolTip("Save in RGB instead of YCbCr. May increase size but removes color transitions")
         jpeg_layout.addWidget(self.jpeg_keep_rgb, 4, 1)
 
-        self.settings_layout.addWidget(self.jpeg_group)
+        self.advanced_box.add_widget(self.jpeg_group)
         return {
             "progressive": self.jpeg_progressive,
             "subsampling": self.jpeg_subsampling,
@@ -454,7 +501,7 @@ class MainWindow(QMainWindow):
         self.webp_exact.setChecked(False)
         self.webp_exact.setToolTip("Save RGB under transparency. Increases size but improves quality")
         webp_layout.addWidget(self.webp_exact, 3, 1)
-        self.settings_layout.addWidget(self.webp_group)
+        self.advanced_box.add_widget(self.webp_group)
 
         return {
             "lossless": self.webp_lossless,
@@ -539,7 +586,7 @@ class MainWindow(QMainWindow):
         self.avif_tile_cols.setValue(0)
         self.avif_tile_cols.setToolTip("Explicit tile columns (if auto tiling = false)")
         avif_layout.addWidget(self.avif_tile_cols, 8, 1)
-        self.settings_layout.addWidget(self.avif_group)
+        self.advanced_box.add_widget(self.avif_group)
 
         return {
             "subsampling": self.avif_subsampling,
@@ -597,8 +644,8 @@ class MainWindow(QMainWindow):
         # Basic parameters
         params = {
             "quality": self.quality_spinbox.value(),
-            "max_largest_side": self.max_largest_spinbox.value(),
-            "max_smallest_side": self.max_smallest_spinbox.value(),
+            "max_largest_side": self.max_largest_spinbox.value() if self.max_largest_checkbox.isChecked() else None,
+            "max_smallest_side": self.max_smallest_spinbox.value() if self.max_smallest_checkbox.isChecked() else None,
             "preserve_structure": self.preserve_structure_checkbox.isChecked(),
             "output_format": self.format_combo.currentText(),
             "input_directory": str(self.input_directory),
@@ -784,31 +831,20 @@ Output directory: {self.output_directory}
 
     def show_comparison(self) -> None:
         """Show the image comparison window."""
-        if not self.output_directory or not self.output_directory.exists():
-            QMessageBox.warning(self, "Warning", "Please complete compression first.")
-            return
-
         try:
-            assert self.output_directory is not None
-            # Create image pairs
-            comparison_pairs = []
-            image_pairs = create_image_pairs(self.output_directory, self.input_directory)
+            from service.image_comparison_viewer import MainWindow as ComparisonViewer
 
-            for img1_path, img2_path in image_pairs:
-                # Determine pair name based on whether it's a real comparison
-                if img1_path.parent != img2_path.parent:
-                    # This is a real comparison (original vs compressed)
-                    pair_name = f"{img1_path.name} (Original vs Compressed)"
+            self.comparison_window = ComparisonViewer()
+            self.comparison_window.show()
+
+            if self.output_directory and self.input_directory:
+                settings_file = self.output_directory / "compression_settings.json"
+                if settings_file.exists():
+                    self.comparison_window.load_config_from_path(settings_file)
                 else:
-                    # Fallback: same file comparison
-                    pair_name = f"{img1_path.name} (Same file)"
+                    self.comparison_window.load_directories_from_paths(self.output_directory, self.input_directory)
 
-                comparison_pairs.append(ImagePair(str(img1_path), str(img2_path), pair_name))
-
-            # Show comparison window with settings file
-            settings_file = self.output_directory / "compression_settings.json"
-            self.comparison_window = show_comparison_window(comparison_pairs, settings_file)
-            self.log_message(f"Opened comparison window with {len(comparison_pairs)} image pairs")
+            self.log_message("Opened comparison window")
 
         except Exception as e:
             self.log_message(f"Error opening comparison: {e}")
