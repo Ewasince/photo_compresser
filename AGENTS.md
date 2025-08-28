@@ -4,17 +4,18 @@
 - Install deps: `uv sync`
 
 ## Code style
-- Format code: `uv run ruff format .`
+- Format code: `make align_code`
 - Use type hints and Python 3.12 features.
 
 ## Dev environment tips
-- Run commands through `uv run` to use the project environment.
+- Before run commands first run `source .venv/bin/activate` to use the project environment.
 
 ## Testing instructions
-- Lint: `uv run ruff check . --fix`
-- Type-check: `uv run mypy`
-- Tests: `uv run pytest`
+- Lint: `make lint.ruff`
+- Type-check: `make lint.mypy`
+- Tests: `make test.pytest`
+- Lint + Type-check + pre-commit commands: `make pre-commit-all`
 
 ## PR instructions
-- Title format: `[photo_compresser] <Title>`
-- Ensure all lint and test commands pass before submitting.
+- Title format: `<type>[optional scope]: <Title>`
+- Ensure all pre-commit and test commands pass before submitting.
