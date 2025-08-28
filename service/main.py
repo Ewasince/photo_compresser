@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from service.file_utils import format_timedelta
 from service.image_comparison import ImagePair, show_comparison_window
 
 # Import our modules
@@ -66,6 +67,7 @@ class CompressionWorker(QThread):
         """Run the compression process."""
         try:
             self.status_updated.emit("Starting compression...")
+            start_time = datetime.now()
 
             # Process the directory
             total_files, compressed_files, compressed_paths, failed_files = self.compressor.process_directory(
@@ -83,6 +85,9 @@ class CompressionWorker(QThread):
             stats["compressed_files"] = compressed_files
             stats["failed_files_count"] = len(failed_files)
 
+            elapsed = datetime.now() - start_time
+            stats["conversion_time"] = format_timedelta(elapsed)
+
             # Create image pairs for settings file
             image_pairs = create_image_pairs(self.output_dir, self.input_dir)
 
@@ -94,6 +99,7 @@ class CompressionWorker(QThread):
                     image_pairs,
                     stats,
                     failed_files,
+                    stats["conversion_time"],
                 )
 
             self.status_updated.emit(

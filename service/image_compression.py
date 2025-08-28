@@ -455,6 +455,7 @@ def save_compression_settings(
     image_pairs: list[tuple[Path, Path]],
     stats: dict[str, Any],
     failed_files: list[Path] | None = None,
+    conversion_time: str | None = None,
 ) -> Path | None:
     """
     Save compression settings and image pairs to a JSON file.
@@ -464,6 +465,7 @@ def save_compression_settings(
         compression_settings: Dictionary with compression parameters
         image_pairs: List of image pairs for comparison
         failed_files: List of image paths that failed to compress
+        conversion_time: Human-readable duration of the compression process
     """
     import json
     from datetime import datetime
@@ -486,6 +488,9 @@ def save_compression_settings(
         "failed_files": [str(path) for path in failed_files],
         "stats": stats,
     }
+
+    if conversion_time is not None:
+        settings_data["conversion_time"] = conversion_time
 
     settings_file = output_dir / "compression_settings.json"
     try:
