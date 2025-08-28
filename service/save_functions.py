@@ -1,4 +1,3 @@
-import os  # ← для os.utime
 from pathlib import Path
 from typing import Any
 
@@ -17,16 +16,9 @@ def _flatten_for_jpeg(im: Image.Image, background: tuple[int, int, int] = (255, 
     return im.convert("RGB") if im.mode not in ("RGB", "L") else im
 
 
-def _copy_times_from_src(src: Path, dst: Path) -> None:
-    """Копирует atime/mtime исходного файла на новый файл (через os.utime)."""
-    st = src.stat()
-    os.utime(dst, ns=(st.st_atime_ns, st.st_mtime_ns))
-
-
 # JPEG
 def save_jpeg(
     im: Image.Image,
-    src: Path,
     dst: Path,
     *,
     quality: int = 75,  # [БАЗОВЫЙ] 0–100 (дефолт Pillow: 75). Ниже → сильнее сжатие
@@ -73,14 +65,10 @@ def save_jpeg(
 
     im.save(dst, format="JPEG", **{k: v for k, v in kwargs.items() if v is not None})
 
-    # Копируем временные метки из исходного файла
-    _copy_times_from_src(src, dst)
-
 
 # WebP
 def save_webp(
     im: Image.Image,
-    src: str | Path,
     dst: str | Path,
     *,
     lossless: bool = False,  # [БАЗОВЫЙ] False/True. Влияет радикально на метод сжатия
@@ -119,20 +107,15 @@ def save_webp(
     if xmp:
         kwargs["xmp"] = xmp
 
-    src_path = Path(src)
     dst_path = Path(dst)
 
     im.save(dst_path, format="WEBP", **kwargs)
-
-    # Копируем временные метки из исходного файла
-    _copy_times_from_src(src_path, dst_path)
 
 
 # ────────────────────────────────────────────────────────────────────────────────
 # AVIF (через pillow-avif-plugin; в официальном Pillow — аналогично по ключам)
 def save_avif(
     im: Image.Image,
-    src: str | Path,
     dst: str | Path,
     *,
     quality: int = 75,  # [БАЗОВЫЙ] 0–100 (дефолт 75). Ниже → сильнее сжатие
@@ -183,10 +166,6 @@ def save_avif(
     if xmp:
         kwargs["xmp"] = xmp
 
-    src_path = Path(src)
     dst_path = Path(dst)
 
     im.save(dst_path, format="AVIF", **kwargs)
-
-    # Копируем временные метки из исходного файла
-    _copy_times_from_src(src_path, dst_path)
