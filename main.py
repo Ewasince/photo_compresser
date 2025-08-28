@@ -186,7 +186,6 @@ class MainWindow(QMainWindow):
         self.max_largest_spinbox = QSpinBox()
         self.max_largest_spinbox.setRange(100, 10000)
         self.max_largest_spinbox.setValue(1920)
-        self.max_largest_spinbox.setSuffix(" px")
         self.max_largest_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
         self.max_largest_spinbox.setToolTip("Maximum size of the largest side in pixels")
         self.basic_layout.addWidget(self.max_largest_spinbox, 1, 1)
