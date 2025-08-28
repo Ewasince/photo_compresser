@@ -13,7 +13,7 @@ def pixmap_from_heic(path: str) -> QPixmap:
 
 
 class ImagePair:
-    def __init__(self, image1_path: str, image2_path: str, name: str = ""):
+    def __init__(self, image1_path: str, image2_path: str, name: str = "") -> None:
         self.image1_path = image1_path
         self.image2_path = image2_path
         self.name = name or f"{os.path.basename(image1_path)} vs {os.path.basename(image2_path)}"
@@ -32,7 +32,7 @@ class ImagePair:
             self._pixmap2 = pixmap_from_heic(self.image2_path)
         return self._pixmap2
 
-    def create_thumbnail(self, size: QSize = None) -> QPixmap:
+    def create_thumbnail(self, size: QSize | None = None) -> QPixmap:
         size = size or QSize(100, 100)
         """Create a thumbnail showing both images side by side."""
         pixmap1 = self.get_pixmap1()

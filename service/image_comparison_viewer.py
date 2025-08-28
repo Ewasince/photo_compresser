@@ -7,7 +7,15 @@ A PyQt6 application for comparing pairs of images with interactive features.
 import sys
 
 from PyQt6.QtCore import QPoint, QRect, QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPen, QPixmap, QWheelEvent
+from PyQt6.QtGui import (
+    QColor,
+    QMouseEvent,
+    QPaintEvent,
+    QPainter,
+    QPen,
+    QPixmap,
+    QWheelEvent,
+)
 from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -26,7 +34,7 @@ from service.image_pair import ImagePair
 class ComparisonViewer(QWidget):
     """Main widget for displaying and comparing images."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -55,13 +63,13 @@ class ComparisonViewer(QWidget):
             }
         """)
 
-    def set_image_pair(self, image_pair: ImagePair):
+    def set_image_pair(self, image_pair: ImagePair) -> None:
         """Set the image pair to display."""
         self.image_pair = image_pair
         self.reset_view()
         self.update()
 
-    def reset_view(self):
+    def reset_view(self) -> None:
         """Reset zoom and pan to fit images."""
         if not self.image_pair:
             return
@@ -133,7 +141,7 @@ class ComparisonViewer(QWidget):
 
         return scaled1, scaled2
 
-    def paintEvent(self, event):  # noqa: ARG002
+    def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: ARG002
         """Custom paint event for drawing the comparison view."""
         if not self.image_pair:
             # Draw placeholder
@@ -202,9 +210,9 @@ class ComparisonViewer(QWidget):
         painter.setPen(QPen(QColor(0, 0, 0), 1))
         painter.drawRect(handle_rect)
 
-    def mousePressEvent(self, event: QMouseEvent):
+    def mousePressEvent(self, event: QMouseEvent | None) -> None:
         """Handle mouse press events."""
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event is not None and event.button() == Qt.MouseButton.LeftButton:
             # Check if clicking on slider
             if self.is_near_slider(event.pos()):
                 self.is_dragging_slider = True
@@ -213,16 +221,16 @@ class ComparisonViewer(QWidget):
             self.last_mouse_pos = event.pos()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
-    def mouseReleaseEvent(self, event: QMouseEvent):
+    def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
         """Handle mouse release events."""
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event is not None and event.button() == Qt.MouseButton.LeftButton:
             self.is_panning = False
             self.is_dragging_slider = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
 
-    def mouseMoveEvent(self, event: QMouseEvent):
+    def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
         """Handle mouse move events."""
-        if not self.image_pair:
+        if not self.image_pair or event is None:
             return
 
         if self.is_dragging_slider:
@@ -252,9 +260,9 @@ class ComparisonViewer(QWidget):
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
 
-    def wheelEvent(self, event: QWheelEvent):
+    def wheelEvent(self, event: QWheelEvent | None) -> None:
         """Handle mouse wheel events for zooming and scrolling."""
-        if not self.image_pair:
+        if not self.image_pair or event is None:
             return
 
         modifiers = event.modifiers()
@@ -304,7 +312,7 @@ class ThumbnailWidget(QWidget):
 
     clicked = pyqtSignal(ImagePair)
 
-    def __init__(self, image_pair: ImagePair, parent=None):
+    def __init__(self, image_pair: ImagePair, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.image_pair = image_pair
         self.setFixedSize(120, 120)
@@ -326,7 +334,7 @@ class ThumbnailWidget(QWidget):
             }
         """)
 
-    def paintEvent(self, event):  # noqa: ARG002
+    def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: ARG002
         """Draw the thumbnail."""
         painter = QPainter(self)
 
@@ -348,9 +356,9 @@ class ThumbnailWidget(QWidget):
             self.image_pair.name[:15] + "..." if len(self.image_pair.name) > 15 else self.image_pair.name,
         )
 
-    def mousePressEvent(self, event: QMouseEvent):
+    def mousePressEvent(self, event: QMouseEvent | None) -> None:
         """Handle click events."""
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event is not None and event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self.image_pair)
 
 
@@ -359,7 +367,7 @@ class ThumbnailCarousel(QScrollArea):
 
     thumbnail_clicked = pyqtSignal(ImagePair)
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -394,24 +402,26 @@ class ThumbnailCarousel(QScrollArea):
             }
         """)
 
-    def add_image_pair(self, image_pair: ImagePair):
+    def add_image_pair(self, image_pair: ImagePair) -> None:
         """Add an image pair thumbnail to the carousel."""
         thumbnail = ThumbnailWidget(image_pair)
         thumbnail.clicked.connect(self.thumbnail_clicked.emit)
         self.container_layout.addWidget(thumbnail)
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear all thumbnails."""
         while self.container_layout.count():
             child = self.container_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
+            if child is not None:
+                widget = child.widget()
+                if widget is not None:
+                    widget.deleteLater()
 
 
 class MainWindow(QMainWindow):
     """Main application window."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.image_pairs: list[ImagePair] = []
         self.current_pair_index = -1
@@ -428,7 +438,7 @@ class MainWindow(QMainWindow):
             }
         """)
 
-    def setup_ui(self):
+    def setup_ui(self) -> None:
         """Set up the user interface."""
         # Central widget
         central_widget = QWidget()
@@ -497,13 +507,13 @@ class MainWindow(QMainWindow):
         self.carousel = ThumbnailCarousel()
         main_layout.addWidget(self.carousel)
 
-    def setup_connections(self):
+    def setup_connections(self) -> None:
         """Set up signal connections."""
         self.load_button.clicked.connect(self.load_image_pair)
         self.reset_button.clicked.connect(self.reset_view)
         self.carousel.thumbnail_clicked.connect(self.load_image_pair_from_thumbnail)
 
-    def load_image_pair(self):
+    def load_image_pair(self) -> None:
         """Load a pair of images."""
         # Load first image
         file1, _ = QFileDialog.getOpenFileName(
@@ -539,17 +549,17 @@ class MainWindow(QMainWindow):
 
         self.update_status()
 
-    def load_image_pair_from_thumbnail(self, image_pair: ImagePair):
+    def load_image_pair_from_thumbnail(self, image_pair: ImagePair) -> None:
         """Load an image pair from a thumbnail click."""
         self.viewer.set_image_pair(image_pair)
         self.current_pair_index = self.image_pairs.index(image_pair)
         self.update_status()
 
-    def reset_view(self):
+    def reset_view(self) -> None:
         """Reset the viewer to fit images."""
         self.viewer.reset_view()
 
-    def update_status(self):
+    def update_status(self) -> None:
         """Update the status label."""
         if self.image_pairs:
             current_pair = self.image_pairs[self.current_pair_index] if self.current_pair_index >= 0 else None
@@ -563,7 +573,7 @@ class MainWindow(QMainWindow):
             self.status_label.setText("No images loaded")
 
 
-def main():
+def main() -> None:
     """Main application entry point."""
     app = QApplication(sys.argv)
 
