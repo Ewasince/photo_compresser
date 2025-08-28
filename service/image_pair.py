@@ -12,6 +12,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 
 from PIL import Image
+from PIL.ImageQt import ImageQt
 from PyQt6.QtCore import QSize
 from PyQt6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 
@@ -22,9 +23,7 @@ def _load_pixmap(path: str) -> QPixmap:
     """Load an image file into a :class:`QPixmap`."""
 
     image = Image.open(path).convert("RGBA")
-    data = image.tobytes()
-    qimg = QImage(data, image.width, image.height, QImage.Format.Format_RGBA8888).copy()
-    return QPixmap.fromImage(qimg)
+    return QPixmap.fromImage(ImageQt(image).copy())
 
 
 def _create_preview(path: str, width: int, height: int) -> QImage:
@@ -32,8 +31,7 @@ def _create_preview(path: str, width: int, height: int) -> QImage:
 
     image = Image.open(path).convert("RGBA")
     image.thumbnail((width, height), Image.Resampling.LANCZOS)
-    data = image.tobytes()
-    return QImage(data, image.width, image.height, QImage.Format.Format_RGBA8888).copy()
+    return ImageQt(image).copy()
 
 
 CONFIG: CacheConfig = load_cache_config()

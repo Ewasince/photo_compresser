@@ -466,7 +466,11 @@ class ThumbnailWidget(QWidget):
         self._is_loading = True
 
         def handle_result(fut: Future[QImage]) -> None:
-            image = fut.result()
+            try:
+                image = fut.result()
+            except Exception:  # pragma: no cover - best effort
+                self._is_loading = False
+                return
             QTimer.singleShot(0, lambda: self._set_thumbnail(QPixmap.fromImage(image)))
 
         future = self._executor.submit(self.image_pair.create_thumbnail, self.thumbnail_size)
