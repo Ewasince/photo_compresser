@@ -14,8 +14,12 @@
 - Lint: `make lint.ruff`
 - Type-check: `make lint.mypy`
 - Tests: `make test.pytest`
-- Lint + Type-check + pre-commit commands: `make pre-commit-all`
+- Lint + Type-check + pre-commit commands: `pre-commit-all`
+
+## Git instructions
+- Commit message format: `<type>[optional scope]: <Title>`
+- Create branches in sub-branch `codex`, e.g. `codex/feature-name`
 
 ## PR instructions
-- Title format: `<type>[optional scope]: <Title>`
-- Ensure all pre-commit and test commands pass before submitting.
+- Title format: `[photo_compresser] <Title>`
+- Ensure all lint and test commands pass before submitting.
