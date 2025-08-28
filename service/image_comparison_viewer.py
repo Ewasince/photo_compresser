@@ -432,9 +432,7 @@ class ThumbnailWidget(QWidget):
         self.image_pair = image_pair
         self.setFixedSize(120, 120)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        # Create thumbnail
-        self.thumbnail = image_pair.create_thumbnail(QSize(100, 100))
+        self.thumbnail_size = QSize(100, 100)
 
         self.setStyleSheet("""
             QWidget {
@@ -454,11 +452,13 @@ class ThumbnailWidget(QWidget):
         painter = QPainter(self)
 
         # Draw thumbnail centered with space for the label
+        thumbnail = self.image_pair.create_thumbnail(self.thumbnail_size)
+
         label_height = 20
         available_height = self.height() - label_height
-        x = (self.width() - self.thumbnail.width()) // 2
-        y = (available_height - self.thumbnail.height()) // 2
-        painter.drawPixmap(x, y, self.thumbnail)
+        x = (self.width() - thumbnail.width()) // 2
+        y = (available_height - thumbnail.height()) // 2
+        painter.drawPixmap(x, y, thumbnail)
 
         # Draw name below the thumbnail
         painter.setPen(QPen(QColor(255, 255, 255)))
