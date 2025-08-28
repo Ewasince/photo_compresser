@@ -51,6 +51,7 @@ repos:
         name: mypy
         description: Python type checker
         entry: mypy
+        args: [service]
         language: system
         types_or: [python, pyi]
         pass_filenames: false
