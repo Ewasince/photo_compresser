@@ -480,10 +480,12 @@ class CompressionStatsDialog(QDialog):
         def format_value(key: str, value: Any) -> str:
             if isinstance(value, int | float):
                 if key.endswith("_mb"):
-                    return f"{value:.2f} MB"
+                    return f"{float(value):.2f} MB"
                 if key == "compression_ratio_percent":
-                    return f"{value:.2f} %"
-                return f"{value}"
+                    return f"{float(value):.2f} %"
+                if isinstance(value, float) and value.is_integer():
+                    return str(int(value))
+                return str(value)
             return str(value)
 
         keys = sorted(set(stats1.keys()) | set(stats2.keys()))
@@ -506,8 +508,10 @@ class CompressionStatsDialog(QDialog):
                     diff_text = f"{diff:.2f} MB"
                 elif key == "compression_ratio_percent":
                     diff_text = f"{diff:.2f} %"
+                elif diff.is_integer():
+                    diff_text = str(int(diff))
                 else:
-                    diff_text = f"{diff}"
+                    diff_text = str(diff)
             elif key == "conversion_time" and isinstance(val1, str) and isinstance(val2, str):
                 v1 = parse_time(val1)
                 v2 = parse_time(val2)
