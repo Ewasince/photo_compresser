@@ -251,14 +251,17 @@ class MainWindow(QMainWindow):
         scroll_area.setWidgetResizable(True)
         scroll_area.setMaximumHeight(400)
         scroll_area.setStyleSheet("QScrollArea { border: none; }")
+        scroll_area.setContentsMargins(0, 0, 0, 0)
 
         # Compression settings container
         self.settings_container = QWidget()
         self.settings_layout = QVBoxLayout(self.settings_container)
+        self.settings_layout.setContentsMargins(0, 0, 0, 0)
 
         # Reset settings button at top of settings panel
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.addStretch()
         self.reset_btn = QPushButton("Reset Settings")
         self.reset_btn.setStyleSheet("""
             QPushButton {
@@ -276,8 +279,7 @@ class MainWindow(QMainWindow):
                 background-color: #c0c0c0;
             }
         """)
-        header_layout.addWidget(self.reset_btn, alignment=Qt.AlignmentFlag.AlignLeft)
-        header_layout.addStretch()
+        header_layout.addWidget(self.reset_btn)
         self.settings_layout.addLayout(header_layout)
 
         # Basic settings group
