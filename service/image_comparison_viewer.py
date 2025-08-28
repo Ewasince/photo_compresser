@@ -551,16 +551,21 @@ class ThumbnailCarousel(QScrollArea):
             }
         """)
 
+        self._load_timer = QTimer(self)
+        self._load_timer.setSingleShot(True)
+        self._load_timer.setInterval(50)
+        self._load_timer.timeout.connect(self.load_visible_thumbnails)
+
         scroll_bar = self.horizontalScrollBar()
         if scroll_bar is not None:
-            scroll_bar.valueChanged.connect(self.load_visible_thumbnails)
+            scroll_bar.valueChanged.connect(self._schedule_load_visible_thumbnails)
 
     def add_image_pair(self, image_pair: ImagePair) -> None:
         """Add an image pair thumbnail to the carousel."""
         thumbnail = ThumbnailWidget(image_pair)
         thumbnail.clicked.connect(self.thumbnail_clicked.emit)
         self.container_layout.addWidget(thumbnail)
-        QTimer.singleShot(0, self.load_visible_thumbnails)
+        QTimer.singleShot(0, self._schedule_load_visible_thumbnails)
 
     def clear(self) -> None:
         """Clear all thumbnails."""
@@ -573,11 +578,11 @@ class ThumbnailCarousel(QScrollArea):
 
     def resizeEvent(self, event: QResizeEvent | None) -> None:
         super().resizeEvent(event)
-        self.load_visible_thumbnails()
+        self._schedule_load_visible_thumbnails()
 
     def showEvent(self, event: QShowEvent | None) -> None:
         super().showEvent(event)
-        QTimer.singleShot(0, self.load_visible_thumbnails)
+        QTimer.singleShot(0, self._schedule_load_visible_thumbnails)
 
     def load_visible_thumbnails(self) -> None:
         """Start loading thumbnails that are visible in the viewport."""
@@ -596,6 +601,10 @@ class ThumbnailCarousel(QScrollArea):
             widget_rect = QRect(top_left, widget.size())
             if widget_rect.intersects(viewport_rect):
                 widget.start_loading()
+
+    def _schedule_load_visible_thumbnails(self) -> None:
+        """Debounce thumbnail loading during rapid scrolling."""
+        self._load_timer.start()
 
 
 class CompressionStatsDialog(QDialog):
