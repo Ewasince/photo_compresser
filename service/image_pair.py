@@ -38,9 +38,9 @@ class ImagePair:
         pixmap1 = self.get_pixmap1()
         pixmap2 = self.get_pixmap2()
 
-        # Create a combined thumbnail
+        # Create a combined thumbnail with a subtle background
         combined = QPixmap(size)
-        combined.fill(Qt.GlobalColor.white)
+        combined.fill(QColor("#333333"))
 
         painter = QPainter(combined)
 

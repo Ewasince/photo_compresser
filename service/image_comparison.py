@@ -184,6 +184,10 @@ class ComparisonViewer(QWidget):
 
         # Calculate display positions
         display_rect = self.get_display_rect()
+
+        # Fill unused space with a slightly lighter shade
+        painter.fillRect(display_rect, QColor("#333333"))
+
         center_x = display_rect.center().x() + self.pan_offset.x()
         center_y = display_rect.center().y() + self.pan_offset.y()
 
@@ -421,18 +425,20 @@ class ThumbnailWidget(QWidget):
         """Draw the thumbnail."""
         painter = QPainter(self)
 
-        # Draw thumbnail centered
+        # Draw thumbnail centered with space for the label
+        label_height = 20
+        available_height = self.height() - label_height
         x = (self.width() - self.thumbnail.width()) // 2
-        y = (self.height() - self.thumbnail.height()) // 2
+        y = (available_height - self.thumbnail.height()) // 2
         painter.drawPixmap(x, y, self.thumbnail)
 
-        # Draw name at bottom
+        # Draw name below the thumbnail
         painter.setPen(QPen(QColor(255, 255, 255)))
         font = painter.font()
         font.setPointSize(8)
         painter.setFont(font)
 
-        text_rect = QRect(0, self.height() - 20, self.width(), 20)
+        text_rect = QRect(0, available_height, self.width(), label_height)
         painter.drawText(
             text_rect,
             Qt.AlignmentFlag.AlignCenter,
@@ -459,6 +465,7 @@ class ThumbnailCarousel(QScrollArea):
 
         # Create container widget
         self.container = QWidget()
+        self.container.setStyleSheet("background-color: #1a1a1a;")
         self.container_layout = QHBoxLayout(self.container)
         self.container_layout.setContentsMargins(10, 10, 10, 10)
         self.container_layout.setSpacing(10)
@@ -467,7 +474,7 @@ class ThumbnailCarousel(QScrollArea):
 
         self.setStyleSheet("""
             QScrollArea {
-                background-color: #1e1e1e;
+                background-color: #1a1a1a;
                 border: none;
             }
             QScrollBar:horizontal {
