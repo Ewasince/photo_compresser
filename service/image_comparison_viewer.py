@@ -580,7 +580,7 @@ class CompressionStatsDialog(QDialog):
 
         def diff_param_value(key: str, val1: Any, val2: Any) -> str:
             if isinstance(val1, int | float) and isinstance(val2, int | float):
-                diff = float(val1) - float(val2)
+                diff = abs(float(val1) - float(val2))
                 if key == "quality":
                     return f"{diff:.2f}%" if not diff.is_integer() else f"{int(diff)}%"
                 return f"{diff:.2f}" if not diff.is_integer() else str(int(diff))
