@@ -400,9 +400,7 @@ class ThumbnailWidget(QWidget):
         self.image_pair = image_pair
         self.setFixedSize(120, 120)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        # Create thumbnail
-        self.thumbnail = image_pair.create_thumbnail(QSize(100, 100))
+        self.thumbnail_size = QSize(100, 100)
 
         self.setStyleSheet("""
             QWidget {
@@ -420,11 +418,12 @@ class ThumbnailWidget(QWidget):
     def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: ARG002
         """Draw the thumbnail."""
         painter = QPainter(self)
+        thumb = self.image_pair.create_thumbnail(self.thumbnail_size)
 
         # Draw thumbnail centered
-        x = (self.width() - self.thumbnail.width()) // 2
-        y = (self.height() - self.thumbnail.height()) // 2
-        painter.drawPixmap(x, y, self.thumbnail)
+        x = (self.width() - thumb.width()) // 2
+        y = (self.height() - thumb.height()) // 2
+        painter.drawPixmap(x, y, thumb)
 
         # Draw name at bottom
         painter.setPen(QPen(QColor(255, 255, 255)))
@@ -748,3 +747,20 @@ def show_comparison_window(
     window = ComparisonWindow(image_pairs, settings_file)
     window.show()
     return window
+
+
+def main() -> None:
+    """Run comparison viewer with image pairs from command line."""
+    files = sys.argv[1:]
+    pairs: list[ImagePair] = []
+    for i in range(0, len(files), 2):
+        if i + 1 < len(files):
+            pairs.append(ImagePair(files[i], files[i + 1]))
+    show_comparison_window(pairs)
+    app = QApplication.instance()
+    if app is not None:
+        app.exec()
+
+
+if __name__ == "__main__":
+    main()
