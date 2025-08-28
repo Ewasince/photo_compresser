@@ -336,6 +336,25 @@ class MainWindow(QMainWindow):
         # Action buttons
         button_layout = QHBoxLayout()
 
+        self.reset_btn = QPushButton("Reset Settings")
+        self.reset_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ffc107;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #e0a800;
+            }
+            QPushButton:pressed {
+                background-color: #d39e00;
+            }
+        """)
+
         self.compress_btn = QPushButton("Start Compression")
         self.compress_btn.setStyleSheet("""
             QPushButton {
@@ -382,6 +401,7 @@ class MainWindow(QMainWindow):
         """)
         self.compare_btn.setEnabled(False)
 
+        button_layout.addWidget(self.reset_btn)
         button_layout.addWidget(self.compress_btn)
         button_layout.addWidget(self.compare_btn)
         main_layout.addLayout(button_layout)
@@ -624,6 +644,7 @@ class MainWindow(QMainWindow):
         self.select_input_btn.clicked.connect(self.select_input_directory)
         self.compress_btn.clicked.connect(self.start_compression)
         self.compare_btn.clicked.connect(self.show_comparison)
+        self.reset_btn.clicked.connect(self.reset_settings)
         self.format_combo.currentTextChanged.connect(self.update_format_specific_settings)
 
     def select_input_directory(self) -> None:
@@ -638,6 +659,47 @@ class MainWindow(QMainWindow):
             self.compress_btn.setEnabled(True)
             self.log_message(f"Selected input directory: {self.input_directory}")
             self.compare_btn.setEnabled(True)
+
+    def reset_settings(self) -> None:
+        """Reset all compression settings to their default values."""
+        # Basic settings
+        self.quality_spinbox.setValue(75)
+        self.max_largest_checkbox.setChecked(True)
+        self.max_largest_spinbox.setValue(1920)
+        self.max_largest_spinbox.setEnabled(True)
+        self.max_smallest_checkbox.setChecked(True)
+        self.max_smallest_spinbox.setValue(1080)
+        self.max_smallest_spinbox.setEnabled(True)
+        self.format_combo.setCurrentText("JPEG")
+        self.preserve_structure_checkbox.setChecked(True)
+
+        # JPEG specific
+        self.jpeg_progressive.setChecked(False)
+        self.jpeg_subsampling.setCurrentText("Auto (-1)")
+        self.jpeg_optimize.setChecked(False)
+        self.jpeg_smooth.setValue(0)
+        self.jpeg_keep_rgb.setChecked(False)
+
+        # WebP specific
+        self.webp_lossless.setChecked(False)
+        self.webp_method.setValue(4)
+        self.webp_alpha_quality.setValue(100)
+        self.webp_exact.setChecked(False)
+
+        # AVIF specific
+        self.avif_subsampling.setCurrentText("4:2:0")
+        self.avif_speed.setValue(6)
+        self.avif_codec.setCurrentText("auto")
+        self.avif_range.setCurrentText("full")
+        self.avif_qmin.setValue(-1)
+        self.avif_qmax.setValue(-1)
+        self.avif_autotiling.setChecked(True)
+        self.avif_tile_rows.setValue(0)
+        self.avif_tile_cols.setValue(0)
+
+        # Update UI state
+        self.update_format_specific_settings()
+        self.log_message("Compression settings reset to defaults")
 
     def get_compression_parameters(self) -> dict[str, Any]:
         """Get all compression parameters from UI."""
