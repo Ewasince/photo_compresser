@@ -21,6 +21,7 @@ from PyQt6.QtGui import (
     QPen,
     QPixmap,
     QResizeEvent,
+    QShowEvent,
     QWheelEvent,
 )
 from PyQt6.QtWidgets import (
@@ -559,7 +560,7 @@ class ThumbnailCarousel(QScrollArea):
         thumbnail = ThumbnailWidget(image_pair)
         thumbnail.clicked.connect(self.thumbnail_clicked.emit)
         self.container_layout.addWidget(thumbnail)
-        self.load_visible_thumbnails()
+        QTimer.singleShot(0, self.load_visible_thumbnails)
 
     def clear(self) -> None:
         """Clear all thumbnails."""
@@ -573,6 +574,10 @@ class ThumbnailCarousel(QScrollArea):
     def resizeEvent(self, event: QResizeEvent | None) -> None:
         super().resizeEvent(event)
         self.load_visible_thumbnails()
+
+    def showEvent(self, event: QShowEvent | None) -> None:
+        super().showEvent(event)
+        QTimer.singleShot(0, self.load_visible_thumbnails)
 
     def load_visible_thumbnails(self) -> None:
         """Start loading thumbnails that are visible in the viewport."""
