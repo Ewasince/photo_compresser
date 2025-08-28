@@ -315,7 +315,11 @@ class ImageCompressor:
         return total_files, compressed_files, compressed_paths, failed_files
 
     def get_compression_stats(
-        self, input_dir: Path, output_dir: Path, failed_files: list[Path] | None = None
+        self,
+        input_dir: Path,
+        output_dir: Path,
+        compressed_paths: list[Path] | None = None,
+        failed_files: list[Path] | None = None,
     ) -> dict[str, Any]:
         """Get compression statistics."""
         try:
@@ -326,9 +330,13 @@ class ImageCompressor:
                 for f in input_dir.rglob("*")
                 if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS and f.resolve() not in failed_set
             ]
-            output_files = [f for f in output_dir.rglob("*") if f.is_file()]
+
+            if compressed_paths is not None:
+                output_size = sum(p.stat().st_size for p in compressed_paths if p.exists())
+            else:
+                output_size = sum(f.stat().st_size for f in output_dir.rglob("*") if f.is_file())
+
             input_size = sum(f.stat().st_size for f in input_files)
-            output_size = sum(f.stat().st_size for f in output_files)
 
             input_size_mb = input_size / (1024 * 1024)
             output_size_mb = output_size / (1024 * 1024)
