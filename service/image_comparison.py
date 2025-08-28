@@ -7,7 +7,7 @@ Provides functionality for comparing pairs of images with interactive features.
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QPoint, QRect, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QPoint, QRect, QSize, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QMouseEvent,
@@ -32,6 +32,22 @@ from PyQt6.QtWidgets import (
 
 from service.constants import SUPPORTED_EXTENSIONS
 from service.image_pair import ImagePair
+
+
+class _ThumbnailLoader(QThread):
+    """Background worker that generates a preview pixmap."""
+
+    loaded = pyqtSignal(QPixmap)
+
+    def __init__(self, image_pair: ImagePair, size: QSize) -> None:
+        super().__init__()
+        self._pair = image_pair
+        self._size = size
+
+    def run(self) -> None:  # pragma: no cover - thread execution
+        pixmap = self._pair.create_thumbnail(self._size)
+        self.loaded.emit(pixmap)
+
 
 FORMATS_PATTERNS = " ".join(f"*.{f}" for f in SUPPORTED_EXTENSIONS)
 FORMATS_PATTERN = f"Images ({FORMATS_PATTERNS})"
@@ -404,9 +420,13 @@ class ThumbnailWidget(QWidget):
         self.image_pair = image_pair
         self.setFixedSize(120, 120)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        # Create thumbnail
-        self.thumbnail = image_pair.create_thumbnail(QSize(100, 100))
+        self.thumbnail_size = QSize(100, 100)
+        self._thumbnail: QPixmap | None = None
+        self._is_loading = False
+        self._spinner_angle = 0
+        self._spinner_timer = QTimer(self)
+        self._spinner_timer.timeout.connect(self._advance_spinner)
+        self._loader: _ThumbnailLoader | None = None
 
         self.setStyleSheet("""
             QWidget {
@@ -421,16 +441,52 @@ class ThumbnailWidget(QWidget):
             }
         """)
 
+    def _advance_spinner(self) -> None:
+        self._spinner_angle = (self._spinner_angle + 30) % 360
+        self.update()
+
+    def start_loading(self) -> None:
+        if self._thumbnail is not None or self._is_loading:
+            return
+        self._is_loading = True
+        self._spinner_timer.start(100)
+        self._loader = _ThumbnailLoader(self.image_pair, self.thumbnail_size)
+        self._loader.loaded.connect(self._on_loaded)
+        self._loader.start()
+        self.update()
+
+    def _on_loaded(self, pixmap: QPixmap) -> None:
+        self._thumbnail = pixmap
+        self._is_loading = False
+        self._spinner_timer.stop()
+        self._loader = None
+        self.update()
+
     def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: ARG002
-        """Draw the thumbnail."""
+        """Draw the thumbnail or a loading spinner."""
         painter = QPainter(self)
 
-        # Draw thumbnail centered with space for the label
-        label_height = 20
-        available_height = self.height() - label_height
-        x = (self.width() - self.thumbnail.width()) // 2
-        y = (available_height - self.thumbnail.height()) // 2
-        painter.drawPixmap(x, y, self.thumbnail)
+        if self._thumbnail is None:
+            if self._is_loading:
+                radius = 15
+                center = self.rect().center()
+                pen = QPen(QColor(200, 200, 200))
+                pen.setWidth(3)
+                painter.setPen(pen)
+                painter.drawArc(
+                    center.x() - radius,
+                    center.y() - radius,
+                    radius * 2,
+                    radius * 2,
+                    self._spinner_angle * 16,
+                    120 * 16,
+                )
+        else:
+            label_height = 20
+            available_height = self.height() - label_height
+            x = (self.width() - self._thumbnail.width()) // 2
+            y = (available_height - self._thumbnail.height()) // 2
+            painter.drawPixmap(x, y, self._thumbnail)
 
         # Draw name below the thumbnail
         painter.setPen(QPen(QColor(255, 255, 255)))
@@ -472,6 +528,8 @@ class ThumbnailCarousel(QScrollArea):
 
         self.setWidget(self.container)
 
+        self.thumbnails: list[ThumbnailWidget] = []
+
         self.setStyleSheet("""
             QScrollArea {
                 background-color: #1a1a1a;
@@ -497,6 +555,10 @@ class ThumbnailCarousel(QScrollArea):
         thumbnail = ThumbnailWidget(image_pair)
         thumbnail.clicked.connect(self.thumbnail_clicked.emit)
         self.container_layout.addWidget(thumbnail)
+        self.thumbnails.append(thumbnail)
+
+        delay = (len(self.thumbnails) - 1) * 100
+        QTimer.singleShot(delay, thumbnail.start_loading)
 
     def clear(self) -> None:
         """Clear all thumbnails."""
@@ -506,6 +568,7 @@ class ThumbnailCarousel(QScrollArea):
                 widget = child.widget()
                 if widget is not None:
                     widget.deleteLater()
+        self.thumbnails.clear()
 
 
 class ComparisonWindow(QMainWindow):

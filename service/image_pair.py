@@ -1,79 +1,114 @@
+"""Helpers for working with pairs of images.
+
+This module implements dynamic loading of full-size images and their previews
+using LRU caches whose limits are defined in ``cache_config.toml``. A value of
+``0`` disables the respective limit.
+"""
+
+from __future__ import annotations
+
 import os
+from collections import OrderedDict
+from dataclasses import dataclass
 
 from PIL import Image
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 
+from service.cache_config import CacheConfig, load_cache_config
 
-def pixmap_from_heic(path: str) -> QPixmap:
-    im = Image.open(path).convert("RGBA")
-    data = im.tobytes()  # байты RGBA
-    qimg = QImage(data, im.width, im.height, QImage.Format.Format_RGBA8888).copy()
+
+def _load_pixmap(path: str) -> QPixmap:
+    """Load an image file into a :class:`QPixmap`."""
+
+    image = Image.open(path).convert("RGBA")
+    data = image.tobytes()
+    qimg = QImage(data, image.width, image.height, QImage.Format.Format_RGBA8888).copy()
     return QPixmap.fromImage(qimg)
 
 
+def _create_preview(path: str, width: int, height: int) -> QPixmap:
+    """Create a lightweight preview for the given image path."""
+
+    image = Image.open(path).convert("RGBA")
+    image.thumbnail((width, height), Image.Resampling.LANCZOS)
+    data = image.tobytes()
+    qimg = QImage(data, image.width, image.height, QImage.Format.Format_RGBA8888).copy()
+    return QPixmap.fromImage(qimg)
+
+
+CONFIG: CacheConfig = load_cache_config()
+_IMAGE_CACHE: OrderedDict[str, QPixmap] = OrderedDict()
+_PREVIEW_CACHE: OrderedDict[str, QPixmap] = OrderedDict()
+
+
+def _get_cached_pixmap(path: str) -> QPixmap:
+    if path in _IMAGE_CACHE:
+        _IMAGE_CACHE.move_to_end(path)
+        return _IMAGE_CACHE[path]
+
+    pixmap = _load_pixmap(path)
+    if CONFIG.max_loaded_images > 0 and len(_IMAGE_CACHE) >= CONFIG.max_loaded_images:
+        _IMAGE_CACHE.popitem(last=False)
+    _IMAGE_CACHE[path] = pixmap
+    return pixmap
+
+
+def _create_combined_preview(path1: str, path2: str, size: QSize) -> QPixmap:
+    key = f"{path1}|{path2}|{size.width()}x{size.height()}"
+    if key in _PREVIEW_CACHE:
+        _PREVIEW_CACHE.move_to_end(key)
+        return _PREVIEW_CACHE[key]
+
+    thumb_width = size.width() // 2
+    thumb_height = size.height()
+
+    pixmap1 = _create_preview(path1, thumb_width, thumb_height)
+    pixmap2 = _create_preview(path2, thumb_width, thumb_height)
+
+    combined = QPixmap(size)
+    combined.fill(QColor("#333333"))
+    painter = QPainter(combined)
+
+    x1 = (thumb_width - pixmap1.width()) // 2
+    y1 = (thumb_height - pixmap1.height()) // 2
+    painter.drawPixmap(x1, y1, pixmap1)
+
+    x2 = thumb_width + (thumb_width - pixmap2.width()) // 2
+    y2 = (thumb_height - pixmap2.height()) // 2
+    painter.drawPixmap(x2, y2, pixmap2)
+
+    pen = QPen(QColor(100, 100, 100), 2)
+    painter.setPen(pen)
+    painter.drawLine(thumb_width, 0, thumb_width, thumb_height)
+    painter.end()
+
+    if CONFIG.max_loaded_previews > 0 and len(_PREVIEW_CACHE) >= CONFIG.max_loaded_previews:
+        _PREVIEW_CACHE.popitem(last=False)
+    _PREVIEW_CACHE[key] = combined
+    return combined
+
+
+@dataclass(slots=True)
 class ImagePair:
-    def __init__(self, image1_path: str, image2_path: str, name: str = "") -> None:
-        self.image1_path = image1_path
-        self.image2_path = image2_path
-        self.name = name or f"{os.path.basename(image1_path)} vs {os.path.basename(image2_path)}"
-        self._pixmap1: QPixmap | None = None
-        self._pixmap2: QPixmap | None = None
+    image1_path: str
+    image2_path: str
+    name: str = ""
+
+    def __post_init__(self) -> None:  # pragma: no cover - simple post-init
+        if not self.name:
+            self.name = f"{os.path.basename(self.image1_path)} vs {os.path.basename(self.image2_path)}"
 
     def get_pixmap1(self) -> QPixmap:
-        """Get the first image pixmap, loading it if necessary."""
-        if self._pixmap1 is None:
-            self._pixmap1 = pixmap_from_heic(self.image1_path)
-        return self._pixmap1
+        """Get the first image pixmap using the cache."""
+
+        return _get_cached_pixmap(self.image1_path)
 
     def get_pixmap2(self) -> QPixmap:
-        """Get the second image pixmap, loading it if necessary."""
-        if self._pixmap2 is None:
-            self._pixmap2 = pixmap_from_heic(self.image2_path)
-        return self._pixmap2
+        """Get the second image pixmap using the cache."""
+
+        return _get_cached_pixmap(self.image2_path)
 
     def create_thumbnail(self, size: QSize | None = None) -> QPixmap:
         size = size or QSize(100, 100)
-        """Create a thumbnail showing both images side by side."""
-        pixmap1 = self.get_pixmap1()
-        pixmap2 = self.get_pixmap2()
-
-        # Create a combined thumbnail with a subtle background
-        combined = QPixmap(size)
-        combined.fill(QColor("#333333"))
-
-        painter = QPainter(combined)
-
-        # Calculate thumbnail dimensions
-        thumb_width = size.width() // 2
-        thumb_height = size.height()
-
-        # Draw first image (left side)
-        scaled1 = pixmap1.scaled(
-            thumb_width,
-            thumb_height,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        x1 = (thumb_width - scaled1.width()) // 2
-        y1 = (thumb_height - scaled1.height()) // 2
-        painter.drawPixmap(x1, y1, scaled1)
-
-        # Draw second image (right side)
-        scaled2 = pixmap2.scaled(
-            thumb_width,
-            thumb_height,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        x2 = thumb_width + (thumb_width - scaled2.width()) // 2
-        y2 = (thumb_height - scaled2.height()) // 2
-        painter.drawPixmap(x2, y2, scaled2)
-
-        # Draw divider line
-        pen = QPen(QColor(100, 100, 100), 2)
-        painter.setPen(pen)
-        painter.drawLine(thumb_width, 0, thumb_width, thumb_height)
-
-        painter.end()
-        return combined
+        return _create_combined_preview(self.image1_path, self.image2_path, size)
