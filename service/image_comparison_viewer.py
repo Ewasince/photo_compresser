@@ -10,8 +10,8 @@ from PyQt6.QtCore import QPoint, QRect, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QMouseEvent,
-    QPaintEvent,
     QPainter,
+    QPaintEvent,
     QPen,
     QPixmap,
     QWheelEvent,

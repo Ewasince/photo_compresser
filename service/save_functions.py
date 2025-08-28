@@ -7,9 +7,7 @@ from PIL import Image
 
 
 # ВСПОМОГАТЕЛЬНОЕ: аккуратно убирать альфу для JPEG
-def _flatten_for_jpeg(
-    im: Image.Image, background: tuple[int, int, int] = (255, 255, 255)
-) -> Image.Image:
+def _flatten_for_jpeg(im: Image.Image, background: tuple[int, int, int] = (255, 255, 255)) -> Image.Image:
     """
     JPEG не поддерживает альфа-канал. Эта функция безопасно «сплющит» RGBA к RGB.
     """
