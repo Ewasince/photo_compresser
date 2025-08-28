@@ -362,20 +362,36 @@ class ComparisonViewer(QWidget):
         painter.setFont(font)
         painter.setPen(QPen(QColor(255, 255, 255)))
 
+        padding = 6
+        font_metrics = painter.fontMetrics()
+        text_height = font_metrics.height()
+
         left_resolution_text = f"{orig_width1} × {orig_height1}"
-        left_text_rect = QRect(img1_x + 10, img1_y + scaled_height1 - 40, 200, 30)
+        left_text_width = font_metrics.horizontalAdvance(left_resolution_text)
+        left_text_rect = QRect(
+            img1_x + 10,
+            img1_y + scaled_height1 - text_height - padding - 10,
+            left_text_width + 2 * padding,
+            text_height + 2 * padding,
+        )
         painter.fillRect(left_text_rect, QColor(0, 0, 0, 180))
         painter.drawText(
-            left_text_rect,
+            left_text_rect.adjusted(padding, padding, -padding, -padding),
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
             left_resolution_text,
         )
 
         right_resolution_text = f"{orig_width2} × {orig_height2}"
-        right_text_rect = QRect(img2_x + scaled_width2 - 210, img2_y + scaled_height2 - 40, 200, 30)
+        right_text_width = font_metrics.horizontalAdvance(right_resolution_text)
+        right_text_rect = QRect(
+            img2_x + scaled_width2 - right_text_width - 2 * padding - 10,
+            img2_y + scaled_height2 - text_height - padding - 10,
+            right_text_width + 2 * padding,
+            text_height + 2 * padding,
+        )
         painter.fillRect(right_text_rect, QColor(0, 0, 0, 180))
         painter.drawText(
-            right_text_rect,
+            right_text_rect.adjusted(padding, padding, -padding, -padding),
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
             right_resolution_text,
         )
