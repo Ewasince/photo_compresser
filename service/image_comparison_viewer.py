@@ -14,6 +14,7 @@ from typing import Any, ClassVar
 from PyQt6.QtCore import QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
+    QImage,
     QMouseEvent,
     QPainter,
     QPaintEvent,
@@ -466,9 +467,9 @@ class ThumbnailWidget(QWidget):
     def _load_thumbnail(self) -> None:
         """Load the thumbnail in a worker thread."""
 
-        def handle_result(fut: Future[QPixmap]) -> None:
-            pixmap = fut.result()
-            QTimer.singleShot(0, lambda: self._set_thumbnail(pixmap))
+        def handle_result(fut: Future[QImage]) -> None:
+            image = fut.result()
+            QTimer.singleShot(0, lambda: self._set_thumbnail(QPixmap.fromImage(image)))
 
         future = self._executor.submit(self.image_pair.create_thumbnail, self.thumbnail_size)
         future.add_done_callback(handle_result)

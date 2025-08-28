@@ -27,19 +27,18 @@ def _load_pixmap(path: str) -> QPixmap:
     return QPixmap.fromImage(qimg)
 
 
-def _create_preview(path: str, width: int, height: int) -> QPixmap:
+def _create_preview(path: str, width: int, height: int) -> QImage:
     """Create a lightweight preview for the given image path."""
 
     image = Image.open(path).convert("RGBA")
     image.thumbnail((width, height), Image.Resampling.LANCZOS)
     data = image.tobytes()
-    qimg = QImage(data, image.width, image.height, QImage.Format.Format_RGBA8888).copy()
-    return QPixmap.fromImage(qimg)
+    return QImage(data, image.width, image.height, QImage.Format.Format_RGBA8888).copy()
 
 
 CONFIG: CacheConfig = load_cache_config()
 _IMAGE_CACHE: OrderedDict[str, QPixmap] = OrderedDict()
-_PREVIEW_CACHE: OrderedDict[str, QPixmap] = OrderedDict()
+_PREVIEW_CACHE: OrderedDict[str, QImage] = OrderedDict()
 
 
 def _get_cached_pixmap(path: str) -> QPixmap:
@@ -54,7 +53,7 @@ def _get_cached_pixmap(path: str) -> QPixmap:
     return pixmap
 
 
-def _create_combined_preview(path1: str, path2: str, size: QSize) -> QPixmap:
+def _create_combined_preview(path1: str, path2: str, size: QSize) -> QImage:
     key = f"{path1}|{path2}|{size.width()}x{size.height()}"
     if key in _PREVIEW_CACHE:
         _PREVIEW_CACHE.move_to_end(key)
@@ -63,20 +62,20 @@ def _create_combined_preview(path1: str, path2: str, size: QSize) -> QPixmap:
     thumb_width = size.width() // 2
     thumb_height = size.height()
 
-    pixmap1 = _create_preview(path1, thumb_width, thumb_height)
-    pixmap2 = _create_preview(path2, thumb_width, thumb_height)
+    image1 = _create_preview(path1, thumb_width, thumb_height)
+    image2 = _create_preview(path2, thumb_width, thumb_height)
 
-    combined = QPixmap(size)
+    combined = QImage(size, QImage.Format.Format_RGBA8888)
     combined.fill(QColor("#333333"))
     painter = QPainter(combined)
 
-    x1 = (thumb_width - pixmap1.width()) // 2
-    y1 = (thumb_height - pixmap1.height()) // 2
-    painter.drawPixmap(x1, y1, pixmap1)
+    x1 = (thumb_width - image1.width()) // 2
+    y1 = (thumb_height - image1.height()) // 2
+    painter.drawImage(x1, y1, image1)
 
-    x2 = thumb_width + (thumb_width - pixmap2.width()) // 2
-    y2 = (thumb_height - pixmap2.height()) // 2
-    painter.drawPixmap(x2, y2, pixmap2)
+    x2 = thumb_width + (thumb_width - image2.width()) // 2
+    y2 = (thumb_height - image2.height()) // 2
+    painter.drawImage(x2, y2, image2)
 
     pen = QPen(QColor(100, 100, 100), 2)
     painter.setPen(pen)
@@ -109,6 +108,6 @@ class ImagePair:
 
         return _get_cached_pixmap(self.image2_path)
 
-    def create_thumbnail(self, size: QSize | None = None) -> QPixmap:
+    def create_thumbnail(self, size: QSize | None = None) -> QImage:
         size = size or QSize(100, 100)
         return _create_combined_preview(self.image1_path, self.image2_path, size)
