@@ -5,6 +5,7 @@ Handles image compression with configurable quality and size parameters.
 """
 
 import logging
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from PIL import Image
 from pillow_heif import register_heif_opener
 
 from service.constants import SUPPORTED_EXTENSIONS
+from service.file_utils import copy_times_from_src
 from service.save_functions import save_avif, save_jpeg, save_webp
 
 register_heif_opener()
@@ -86,7 +88,7 @@ class ImageCompressor:
             logger.warning(f"Could not analyze image {image_path}: {e}")
             return False
 
-    def compress_image(self, input_path: Path, output_path: Path) -> bool:
+    def compress_image(self, input_path: Path, output_path: Path) -> Path | None:
         """
         Compress a single image according to the specified parameters.
 
@@ -95,7 +97,7 @@ class ImageCompressor:
             output_path: Path where the compressed image should be saved
 
         Returns:
-            True if compression was successful, False otherwise
+            Path to saved image if successful, otherwise None
         """
         try:
             with Image.open(input_path) as img:
@@ -141,9 +143,9 @@ class ImageCompressor:
 
         except Exception as e:
             logger.exception(f"Error compressing {input_path}: {e}")
-            return False
+            return None
 
-    def _save_jpeg_custom(self, img: Image.Image, input_path: Path, output_path: Path) -> bool:
+    def _save_jpeg_custom(self, img: Image.Image, input_path: Path, output_path: Path) -> Path | None:
         """Save image using custom JPEG save function."""
         try:
             # Convert to RGB if necessary
@@ -161,15 +163,15 @@ class ImageCompressor:
             }
 
             # Call custom save function
-            save_jpeg(img, input_path, output_path, **params)
+            save_jpeg(img, output_path, **params)
             logger.info(f"Compressed JPEG: {input_path.name} -> {output_path.name}")
-            return True
+            return output_path
 
         except Exception as e:
             logger.error(f"Error in custom JPEG save: {e}")
-            return False
+            return None
 
-    def _save_webp_custom(self, img: Image.Image, input_path: Path, output_path: Path) -> bool:
+    def _save_webp_custom(self, img: Image.Image, input_path: Path, output_path: Path) -> Path | None:
         """Save image using custom WebP save function."""
         try:
             # Prepare parameters
@@ -182,15 +184,15 @@ class ImageCompressor:
             }
 
             # Call custom save function
-            save_webp(img, input_path, output_path, **params)
+            save_webp(img, output_path, **params)
             logger.info(f"Compressed WebP: {input_path.name} -> {output_path.name}")
-            return True
+            return output_path
 
         except Exception as e:
             logger.error(f"Error in custom WebP save: {e}")
-            return False
+            return None
 
-    def _save_avif_custom(self, img: Image.Image, input_path: Path, output_path: Path) -> bool:
+    def _save_avif_custom(self, img: Image.Image, input_path: Path, output_path: Path) -> Path | None:
         """Save image using custom AVIF save function."""
         try:
             # Prepare parameters
@@ -210,15 +212,15 @@ class ImageCompressor:
             # Call custom save function
             # Note: range_ is renamed to range in the function call
             avif_params = params.copy()
-            save_avif(img, input_path, output_path, **avif_params)
+            save_avif(img, output_path, **avif_params)
             logger.info(f"Compressed AVIF: {input_path.name} -> {output_path.name}")
-            return True
+            return output_path
 
         except Exception as e:
             logger.error(f"Error in custom AVIF save: {e}")
-            return False
+            return None
 
-    def _save_basic(self, img: Image.Image, output_path: Path) -> bool:
+    def _save_basic(self, img: Image.Image, output_path: Path) -> Path | None:
         """Fallback to basic Pillow saving."""
         try:
             # Convert to RGB if necessary (for JPEG output)
@@ -244,11 +246,11 @@ class ImageCompressor:
                 img.save(output_path, "JPEG", quality=self.quality, optimize=True)
 
             logger.info(f"Compressed (basic): {output_path.name}")
-            return True
+            return output_path
 
         except Exception as e:
             logger.error(f"Error in basic save: {e}")
-            return False
+            return None
 
     def _get_extension_according_format(self) -> str:
         """Get the correct file extension based on output format."""
@@ -258,7 +260,7 @@ class ImageCompressor:
             return ".avif"
         return ".jpg"  # Default fallback
 
-    def process_directory(self, input_root: Path, output_root: Path) -> tuple[int, int, list[Path]]:
+    def process_directory(self, input_root: Path, output_root: Path) -> tuple[int, int, list[Path], list[Path]]:
         """
         Process a directory recursively, compressing all supported images.
 
@@ -267,56 +269,91 @@ class ImageCompressor:
             output_root: Root output directory
 
         Returns:
-            Tuple of (total_files, compressed_files, compressed_paths)
+            Tuple of (total_files, compressed_files, compressed_paths, failed_files)
         """
         total_files = 0
         compressed_files = 0
         compressed_paths = []
+        failed_files: list[Path] = []
 
         # Ensure output directory exists
         output_root.mkdir(parents=True, exist_ok=True)
 
         # Walk through input directory
         for file_path in input_root.rglob("*"):
-            if file_path.is_file() and file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
+            if not file_path.is_file():
+                continue
+
+            if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
                 total_files += 1
 
                 # Determine output file path
                 if self.preserve_structure:
-                    # Change extension based on output format
                     base_name = file_path.stem
                     new_extension = self._get_extension_according_format()
-
                     output_file = output_root / f"{base_name}{new_extension}"
                 else:
-                    # Create unique filename to avoid conflicts
                     base_name = file_path.stem
                     new_extension = self._get_extension_according_format()
-
                     counter = 1
                     output_file = output_root / f"{base_name}{new_extension}"
-
-                    # If file exists, add counter
                     while output_file.exists():
                         output_file = output_root / f"{base_name}_{counter}{new_extension}"
                         counter += 1
 
                 # Compress the image
-                if self.compress_image(file_path, output_file):
+                saved_path = self.compress_image(file_path, output_file)
+                if saved_path:
                     compressed_files += 1
-                    compressed_paths.append(output_file)
+                    compressed_paths.append(saved_path)
+                    copy_times_from_src(file_path, saved_path)
                     logger.info(f"Successfully compressed: {file_path.name}")
                 else:
                     logger.warning(f"Failed to compress: {file_path.name}")
+                    failed_files.append(file_path)
+            else:
+                # Copy non-image files to output directory
+                if self.preserve_structure:
+                    rel_path = file_path.relative_to(input_root)
+                    output_file = output_root / rel_path
+                else:
+                    output_file = output_root / file_path.name
+                    counter = 1
+                    while output_file.exists():
+                        output_file = output_root / f"{file_path.stem}_{counter}{file_path.suffix}"
+                        counter += 1
+
+                output_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(file_path, output_file)
+                copy_times_from_src(file_path, output_file)
+                logger.info(f"Copied non-image file: {file_path.name}")
 
         logger.info(f"Compression complete: {compressed_files}/{total_files} files processed")
-        return total_files, compressed_files, compressed_paths
+        return total_files, compressed_files, compressed_paths, failed_files
 
-    def get_compression_stats(self, input_dir: Path, output_dir: Path) -> dict[str, Any]:
+    def get_compression_stats(
+        self,
+        input_dir: Path,
+        output_dir: Path,
+        compressed_paths: list[Path] | None = None,
+        failed_files: list[Path] | None = None,
+    ) -> dict[str, Any]:
         """Get compression statistics."""
         try:
-            input_size = sum(f.stat().st_size for f in input_dir.rglob("*") if f.is_file())
-            output_size = sum(f.stat().st_size for f in output_dir.rglob("*") if f.is_file())
+            failed_set = {f.resolve() for f in failed_files or []}
+
+            input_files = [
+                f
+                for f in input_dir.rglob("*")
+                if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS and f.resolve() not in failed_set
+            ]
+
+            if compressed_paths is not None:
+                output_size = sum(p.stat().st_size for p in compressed_paths if p.exists())
+            else:
+                output_size = sum(f.stat().st_size for f in output_dir.rglob("*") if f.is_file())
+
+            input_size = sum(f.stat().st_size for f in input_files)
 
             input_size_mb = input_size / (1024 * 1024)
             output_size_mb = output_size / (1024 * 1024)
@@ -417,6 +454,8 @@ def save_compression_settings(
     compression_settings: dict[str, Any],
     image_pairs: list[tuple[Path, Path]],
     stats: dict[str, Any],
+    failed_files: list[Path] | None = None,
+    conversion_time: str | None = None,
 ) -> Path | None:
     """
     Save compression settings and image pairs to a JSON file.
@@ -425,9 +464,13 @@ def save_compression_settings(
         output_dir: Directory where to save the settings file
         compression_settings: Dictionary with compression parameters
         image_pairs: List of image pairs for comparison
+        failed_files: List of image paths that failed to compress
+        conversion_time: Human-readable duration of the compression process
     """
     import json
     from datetime import datetime
+
+    failed_files = failed_files or []
 
     settings_data = {
         "compression_settings": compression_settings,
@@ -442,8 +485,12 @@ def save_compression_settings(
             for original_path, compressed_path in image_pairs
         ],
         "total_pairs": len(image_pairs),
+        "failed_files": [str(path) for path in failed_files],
         "stats": stats,
     }
+
+    if conversion_time is not None:
+        settings_data["conversion_time"] = conversion_time
 
     settings_file = output_dir / "compression_settings.json"
     try:
