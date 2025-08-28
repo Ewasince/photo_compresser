@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QProgressBar,
@@ -242,6 +243,43 @@ class MainWindow(QMainWindow):
         input_dir_layout.addWidget(self.input_dir_label, 1)
         input_dir_layout.addWidget(self.select_input_btn)
         input_layout.addLayout(input_dir_layout)
+
+        # Output directory selection
+        output_dir_layout = QHBoxLayout()
+        self.output_dir_edit = QLineEdit()
+        self.output_dir_edit.setPlaceholderText("No output directory selected")
+        self.output_dir_edit.setStyleSheet(
+            "padding: 8px; background-color: white; border: 1px solid #ccc; border-radius: 4px;"
+        )
+        self.select_output_btn = QPushButton("Select Output Directory")
+        self.select_output_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0078d4;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #106ebe;
+            }
+            QPushButton:pressed {
+                background-color: #005a9e;
+            }
+        """)
+
+        # Ensure directory selection buttons have the same width
+        button_width = max(
+            self.select_input_btn.sizeHint().width(),
+            self.select_output_btn.sizeHint().width(),
+        )
+        self.select_input_btn.setFixedWidth(button_width)
+        self.select_output_btn.setFixedWidth(button_width)
+
+        output_dir_layout.addWidget(self.output_dir_edit, 1)
+        output_dir_layout.addWidget(self.select_output_btn)
+        input_layout.addLayout(output_dir_layout)
 
         main_layout.addWidget(input_group)
 
@@ -653,6 +691,8 @@ class MainWindow(QMainWindow):
     def setup_connections(self) -> None:
         """Set up signal connections."""
         self.select_input_btn.clicked.connect(self.select_input_directory)
+        self.select_output_btn.clicked.connect(self.select_output_directory)
+        self.output_dir_edit.textChanged.connect(self.update_output_directory_from_text)
         self.compress_btn.clicked.connect(self.start_compression)
         self.compare_btn.clicked.connect(self.show_comparison)
         self.reset_btn.clicked.connect(self.reset_settings)
@@ -667,6 +707,9 @@ class MainWindow(QMainWindow):
         if directory:
             self.input_directory = Path(directory)
             self.input_dir_label.setText(str(self.input_directory))
+            default_name = f"{self.input_directory.name}_compressed_{datetime.now().strftime('%Y.%m.%d %H%M%S')}"
+            self.output_directory = self.input_directory.parent / default_name
+            self.output_dir_edit.setText(str(self.output_directory))
             self.compress_btn.setEnabled(True)
             self.log_message(f"Selected input directory: {self.input_directory}")
             self.compare_btn.setEnabled(True)
@@ -712,9 +755,29 @@ class MainWindow(QMainWindow):
         self.update_format_specific_settings()
         self.log_message("Compression settings reset to defaults")
 
+    def select_output_directory(self) -> None:
+        """Select output directory for compression results."""
+        initial_dir = str(self.output_directory.parent) if self.output_directory else ""
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select Output Directory", initial_dir, QFileDialog.Option.ShowDirsOnly
+        )
+
+        if directory:
+            self.output_directory = Path(directory)
+            self.output_dir_edit.setText(str(self.output_directory))
+            self.log_message(f"Selected output directory: {self.output_directory}")
+
+    def update_output_directory_from_text(self, text: str) -> None:
+        """Update stored output directory when text changes."""
+        self.output_directory = Path(text) if text else None
+
     def get_compression_parameters(self) -> dict[str, Any]:
         """Get all compression parameters from UI."""
         format_name = self.format_combo.currentText().lower()
+
+        # Ensure output directory reflects current text
+        if self.output_dir_edit.text():
+            self.output_directory = Path(self.output_dir_edit.text())
 
         # Basic parameters
         params = {
@@ -781,9 +844,15 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Warning", "Please select an input directory first.")
             return
 
-        # Create output directory
-        output_name = f"{self.input_directory.name}_compressed_{datetime.now().strftime('%Y.%m.%d %H%M%S')}"
-        self.output_directory = self.input_directory.parent / output_name
+        # Ensure output directory is set
+        # Update output directory from text field
+        if self.output_dir_edit.text():
+            self.output_directory = Path(self.output_dir_edit.text())
+
+        if self.output_directory is None:
+            output_name = f"{self.input_directory.name}_compressed_{datetime.now().strftime('%Y.%m.%d %H%M%S')}"
+            self.output_directory = self.input_directory.parent / output_name
+            self.output_dir_edit.setText(str(self.output_directory))
 
         # Get all compression parameters
         compression_params = self.get_compression_parameters()
