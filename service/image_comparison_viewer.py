@@ -429,7 +429,14 @@ class ThumbnailCarousel(QScrollArea):
 class CompressionStatsDialog(QDialog):
     """Dialog window to display compression statistics side by side."""
 
-    def __init__(self, stats1: dict[str, Any], stats2: dict[str, Any], parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        stats1: dict[str, Any],
+        stats2: dict[str, Any],
+        settings1: dict[str, Any],
+        settings2: dict[str, Any],
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Compression Statistics")
         layout = QGridLayout(self)
@@ -438,6 +445,81 @@ class CompressionStatsDialog(QDialog):
         layout.addWidget(QLabel("Directory 1"), 0, 1)
         layout.addWidget(QLabel("Directory 2"), 0, 2)
         layout.addWidget(QLabel("Difference"), 0, 3)
+
+        param_label_map = {
+            "output_format": "Output Format",
+            "quality": "Quality",
+            "progressive": "Progressive",
+            "subsampling": "Subsampling",
+            "optimize": "Optimize",
+            "smooth": "Smooth",
+            "keep_rgb": "Keep RGB",
+            "lossless": "Lossless",
+            "method": "Method",
+            "alpha_quality": "Alpha Quality",
+            "exact": "Exact",
+            "speed": "Speed",
+            "codec": "Codec",
+            "range": "Range",
+            "qmin": "Qmin",
+            "qmax": "Qmax",
+            "autotiling": "Autotiling",
+            "tile_rows": "Tile Rows",
+            "tile_cols": "Tile Cols",
+        }
+
+        def format_param_value(key: str, value: Any) -> str:
+            if key == "quality" and isinstance(value, int | float):
+                return f"{int(value)}%"
+            if isinstance(value, bool):
+                return "True" if value else "False"
+            return str(value)
+
+        def diff_param_value(key: str, val1: Any, val2: Any) -> str:
+            if isinstance(val1, int | float) and isinstance(val2, int | float):
+                diff = float(val1) - float(val2)
+                if key == "quality":
+                    return f"{diff:.2f}%" if not diff.is_integer() else f"{int(diff)}%"
+                return f"{diff:.2f}" if not diff.is_integer() else str(int(diff))
+            if val1 != val2:
+                return "Different"
+            return ""
+
+        row = 1
+
+        def add_param_row(key: str) -> None:
+            nonlocal row
+            val1 = settings1.get(key, "")
+            val2 = settings2.get(key, "")
+            layout.addWidget(QLabel(param_label_map.get(key, key)), row, 0)
+            layout.addWidget(QLabel(format_param_value(key, val1)), row, 1)
+            layout.addWidget(QLabel(format_param_value(key, val2)), row, 2)
+            layout.addWidget(QLabel(diff_param_value(key, val1, val2)), row, 3)
+            row += 1
+
+        add_param_row("output_format")
+        add_param_row("quality")
+
+        fmt1 = str(settings1.get("output_format", "")).lower()
+        fmt2 = str(settings2.get("output_format", "")).lower()
+        if fmt1 == fmt2:
+            format_specific = {
+                "jpeg": ["progressive", "subsampling", "optimize", "smooth", "keep_rgb"],
+                "webp": ["lossless", "method", "alpha_quality", "exact"],
+                "avif": [
+                    "subsampling",
+                    "speed",
+                    "codec",
+                    "range",
+                    "qmin",
+                    "qmax",
+                    "autotiling",
+                    "tile_rows",
+                    "tile_cols",
+                ],
+            }
+            for key in format_specific.get(fmt1, []):
+                add_param_row(key)
 
         label_map = {
             "input_size_mb": "Input Size",
@@ -489,7 +571,7 @@ class CompressionStatsDialog(QDialog):
             return str(value)
 
         keys = sorted(set(stats1.keys()) | set(stats2.keys()))
-        for row, key in enumerate(keys, start=1):
+        for key in keys:
             layout.addWidget(QLabel(label_map.get(key, key)), row, 0)
             val1 = stats1.get(key, "")
             val2 = stats2.get(key, "")
@@ -525,6 +607,7 @@ class CompressionStatsDialog(QDialog):
             layout.addWidget(label1, row, 1)
             layout.addWidget(label2, row, 2)
             layout.addWidget(label_diff, row, 3)
+            row += 1
 
             if v1 is not None and v2 is not None:
                 if key in higher_better:
@@ -545,7 +628,15 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.image_pairs: list[ImagePair] = []
         self.current_pair_index = -1
-        self.stats_data: tuple[dict[str, Any], dict[str, Any]] | None = None
+        self.stats_data: (
+            tuple[
+                dict[str, Any],
+                dict[str, Any],
+                dict[str, Any],
+                dict[str, Any],
+            ]
+            | None
+        ) = None
 
         self.setup_ui()
         self.setup_connections()
@@ -810,7 +901,12 @@ class MainWindow(QMainWindow):
                 with stats1.open() as f1, stats2.open() as f2:
                     data1 = json.load(f1)
                     data2 = json.load(f2)
-                self.stats_data = (data1.get("stats", {}), data2.get("stats", {}))
+                self.stats_data = (
+                    data1.get("stats", {}),
+                    data2.get("stats", {}),
+                    data1.get("compression_settings", {}),
+                    data2.get("compression_settings", {}),
+                )
                 self.stats_button.setEnabled(True)
             except Exception:
                 self.stats_data = None
@@ -825,7 +921,13 @@ class MainWindow(QMainWindow):
         """Show compression statistics comparison dialog."""
         if not self.stats_data:
             return
-        dialog = CompressionStatsDialog(self.stats_data[0], self.stats_data[1], self)
+        dialog = CompressionStatsDialog(
+            self.stats_data[0],
+            self.stats_data[1],
+            self.stats_data[2],
+            self.stats_data[3],
+            self,
+        )
         dialog.exec()
 
     def load_image_pair_from_thumbnail(self, image_pair: ImagePair) -> None:
