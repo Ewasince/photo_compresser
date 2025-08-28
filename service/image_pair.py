@@ -141,6 +141,12 @@ class ImagePair:
         """Get the second image pixmap, loading it if necessary."""
         return _load_pixmap(self.image2_path)
 
+    def get_cached_thumbnail(self, size: QSize | None = None) -> QPixmap | None:
+        """Return a cached thumbnail if available without loading from disk."""
+        size = size or QSize(100, 100)
+        key = (self.image1_path, self.image2_path, size.width(), size.height())
+        return _thumb_cache.get(key)
+
     def create_thumbnail(self, size: QSize | None = None) -> QPixmap:
         size = size or QSize(100, 100)
         """Create a thumbnail showing both images side by side."""

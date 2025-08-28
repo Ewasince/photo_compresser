@@ -333,14 +333,11 @@ class ThumbnailWidget(QWidget):
         self.setFixedSize(120, 120)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.thumbnail_size = QSize(100, 100)
-        self.thumbnail: QPixmap | None = None
         self._angle = 0
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._advance_spinner)
-        self._timer.start(100)
-        self._loader = _ThumbLoadThread(self.image_pair, self.thumbnail_size)
-        self._loader.loaded.connect(self._on_loaded)
-        self._loader.start()
+        self._loader: _ThumbLoadThread | None = None
+        self._loading = False
 
         self.setStyleSheet("""
             QWidget {
@@ -356,20 +353,28 @@ class ThumbnailWidget(QWidget):
         """)
 
     def _advance_spinner(self) -> None:
-        if self.thumbnail is None:
+        if self._loading:
             self._angle = (self._angle + 30) % 360
             self.update()
         else:
             self._timer.stop()
 
-    def _on_loaded(self, pix: QPixmap) -> None:
-        self.thumbnail = pix
+    def _on_loaded(self, _pix: QPixmap) -> None:
+        self._loading = False
+        self._loader = None
         self.update()
 
     def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: ARG002
         """Draw the thumbnail or loading spinner."""
         painter = QPainter(self)
-        if self.thumbnail is None:
+        thumb = self.image_pair.get_cached_thumbnail(self.thumbnail_size)
+        if thumb is None:
+            if not self._loading:
+                self._loading = True
+                self._timer.start(100)
+                self._loader = _ThumbLoadThread(self.image_pair, self.thumbnail_size)
+                self._loader.loaded.connect(self._on_loaded)
+                self._loader.start()
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             radius = min(self.width(), self.height()) // 4
             painter.translate(self.width() // 2, self.height() // 2)
@@ -378,9 +383,9 @@ class ThumbnailWidget(QWidget):
             painter.drawArc(QRect(-radius, -radius, 2 * radius, 2 * radius), 0, 270 * 16)
             return
 
-        x = (self.width() - self.thumbnail.width()) // 2
-        y = (self.height() - self.thumbnail.height()) // 2
-        painter.drawPixmap(x, y, self.thumbnail)
+        x = (self.width() - thumb.width()) // 2
+        y = (self.height() - thumb.height()) // 2
+        painter.drawPixmap(x, y, thumb)
 
         painter.setPen(QPen(QColor(255, 255, 255)))
         font = painter.font()
