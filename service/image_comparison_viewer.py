@@ -433,7 +433,7 @@ class ComparisonViewer(QWidget):
 class ThumbnailWidget(QWidget):
     """Widget for displaying a thumbnail in the carousel."""
 
-    _executor: ClassVar[ThreadPoolExecutor] = ThreadPoolExecutor(max_workers=4)
+    _executor: ClassVar[ThreadPoolExecutor] = ThreadPoolExecutor(max_workers=2)
 
     clicked = pyqtSignal(ImagePair)
 
@@ -445,6 +445,7 @@ class ThumbnailWidget(QWidget):
         self.thumbnail_size = QSize(100, 100)
         self._thumbnail: QPixmap | None = None
         self._is_loading = False
+        self._future: Future[QImage] | None = None
 
         self.setStyleSheet("""
             QWidget {
@@ -466,19 +467,35 @@ class ThumbnailWidget(QWidget):
         self._is_loading = True
 
         def handle_result(fut: Future[QImage]) -> None:
+            if self._future is not fut:
+                return
+            if fut.cancelled():
+                QTimer.singleShot(0, self._reset_state)
+                return
             try:
                 image = fut.result()
             except Exception:  # pragma: no cover - best effort
-                self._is_loading = False
+                QTimer.singleShot(0, self._reset_state)
                 return
             QTimer.singleShot(0, lambda: self._set_thumbnail(QPixmap.fromImage(image)))
 
         future = self._executor.submit(self.image_pair.create_thumbnail, self.thumbnail_size)
+        self._future = future
         future.add_done_callback(handle_result)
+
+    def cancel_loading(self) -> None:
+        """Cancel an in-progress thumbnail load."""
+        if self._future is not None and not self._future.done():
+            self._future.cancel()
+        self._reset_state()
+
+    def _reset_state(self) -> None:
+        self._future = None
+        self._is_loading = False
 
     def _set_thumbnail(self, pixmap: QPixmap) -> None:
         self._thumbnail = pixmap
-        self._is_loading = False
+        self._reset_state()
         self.update()
 
     def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: ARG002
@@ -577,7 +594,8 @@ class ThumbnailCarousel(QScrollArea):
             child = self.container_layout.takeAt(0)
             if child is not None:
                 widget = child.widget()
-                if widget is not None:
+                if isinstance(widget, ThumbnailWidget):
+                    widget.cancel_loading()
                     widget.deleteLater()
 
     def resizeEvent(self, event: QResizeEvent | None) -> None:
@@ -605,6 +623,8 @@ class ThumbnailCarousel(QScrollArea):
             widget_rect = QRect(top_left, widget.size())
             if widget_rect.intersects(viewport_rect):
                 widget.start_loading()
+            else:
+                widget.cancel_loading()
 
     def _schedule_load_visible_thumbnails(self) -> None:
         """Debounce thumbnail loading during rapid scrolling."""
