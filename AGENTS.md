@@ -17,7 +17,7 @@
 - Lint + Type-check + pre-commit commands: `pre-commit-all`
 
 ## Git instructions
-- Commit message format: `<type>[optional scope]: <message>`
+- Commit message format: `<type>[optional scope]: <description>`
 - Create branches in sub-branch `codex`, e.g. `codex/feature-name`
 
 ## PR instructions
