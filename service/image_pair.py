@@ -1,8 +1,9 @@
 """Helpers for working with pairs of images.
 
-This module implements dynamic loading of full-size images and their previews
-with an LRU cache whose limits are defined in ``cache_config.toml``. A value of
-0 in the configuration disables the limit.
+This module implements dynamic loading of full-size images with an LRU cache
+whose limit is defined in ``cache_config.toml``. A value of 0 disables the
+limit. Previews are generated on demand without caching to avoid interface
+freezes.
 """
 
 from __future__ import annotations
@@ -39,7 +40,6 @@ def _create_preview(path: str, width: int, height: int) -> QPixmap:
 
 CONFIG: CacheConfig = load_cache_config()
 _IMAGE_CACHE: OrderedDict[str, QPixmap] = OrderedDict()
-_PREVIEW_CACHE: OrderedDict[tuple[str, str, int, int], QPixmap] = OrderedDict()
 
 
 def _get_cached_pixmap(path: str) -> QPixmap:
@@ -54,12 +54,7 @@ def _get_cached_pixmap(path: str) -> QPixmap:
     return pixmap
 
 
-def _get_cached_preview(path1: str, path2: str, size: QSize) -> QPixmap:
-    key = (path1, path2, size.width(), size.height())
-    if key in _PREVIEW_CACHE:
-        _PREVIEW_CACHE.move_to_end(key)
-        return _PREVIEW_CACHE[key]
-
+def _create_combined_preview(path1: str, path2: str, size: QSize) -> QPixmap:
     thumb_width = size.width() // 2
     thumb_height = size.height()
 
@@ -83,9 +78,6 @@ def _get_cached_preview(path1: str, path2: str, size: QSize) -> QPixmap:
     painter.drawLine(thumb_width, 0, thumb_width, thumb_height)
     painter.end()
 
-    if CONFIG.max_loaded_previews > 0 and len(_PREVIEW_CACHE) >= CONFIG.max_loaded_previews:
-        _PREVIEW_CACHE.popitem(last=False)
-    _PREVIEW_CACHE[key] = combined
     return combined
 
 
@@ -111,4 +103,4 @@ class ImagePair:
 
     def create_thumbnail(self, size: QSize | None = None) -> QPixmap:
         size = size or QSize(100, 100)
-        return _get_cached_preview(self.image1_path, self.image2_path, size)
+        return _create_combined_preview(self.image1_path, self.image2_path, size)

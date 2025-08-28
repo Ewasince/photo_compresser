@@ -456,12 +456,15 @@ class ThumbnailWidget(QWidget):
         self._spinner_angle = (self._spinner_angle + 30) % 360
         self.update()
 
-    def _load_thumbnail(self) -> None:
-        if self.visibleRegion().isEmpty():
-            # Widget scrolled out of view; defer loading until visible again
-            self._is_loading = False
-            self._spinner_timer.stop()
+    def start_loading(self) -> None:
+        if self._thumbnail is not None or self._is_loading:
             return
+        self._is_loading = True
+        self._spinner_timer.start(100)
+        QTimer.singleShot(0, self._load_thumbnail)
+        self.update()
+
+    def _load_thumbnail(self) -> None:
         self._thumbnail = self.image_pair.create_thumbnail(self.thumbnail_size)
         self._is_loading = False
         self._spinner_timer.stop()
@@ -475,28 +478,20 @@ class ThumbnailWidget(QWidget):
         available_height = self.height() - label_height
 
         if self._thumbnail is None:
-            if self.visibleRegion().isEmpty():
-                if self._is_loading:
-                    self._spinner_timer.stop()
-                    self._is_loading = False
-                return
-            if not self._is_loading:
-                self._is_loading = True
-                self._spinner_timer.start(100)
-                QTimer.singleShot(10, self._load_thumbnail)
-            radius = 15
-            center = self.rect().center()
-            pen = QPen(QColor(200, 200, 200))
-            pen.setWidth(3)
-            painter.setPen(pen)
-            painter.drawArc(
-                center.x() - radius,
-                center.y() - radius,
-                radius * 2,
-                radius * 2,
-                self._spinner_angle * 16,
-                120 * 16,
-            )
+            if self._is_loading:
+                radius = 15
+                center = self.rect().center()
+                pen = QPen(QColor(200, 200, 200))
+                pen.setWidth(3)
+                painter.setPen(pen)
+                painter.drawArc(
+                    center.x() - radius,
+                    center.y() - radius,
+                    radius * 2,
+                    radius * 2,
+                    self._spinner_angle * 16,
+                    120 * 16,
+                )
         else:
             x = (self.width() - self._thumbnail.width()) // 2
             y = (available_height - self._thumbnail.height()) // 2
@@ -542,6 +537,8 @@ class ThumbnailCarousel(QScrollArea):
 
         self.setWidget(self.container)
 
+        self.thumbnails: list[ThumbnailWidget] = []
+
         self.setStyleSheet("""
             QScrollArea {
                 background-color: #1a1a1a;
@@ -567,6 +564,10 @@ class ThumbnailCarousel(QScrollArea):
         thumbnail = ThumbnailWidget(image_pair)
         thumbnail.clicked.connect(self.thumbnail_clicked.emit)
         self.container_layout.addWidget(thumbnail)
+        self.thumbnails.append(thumbnail)
+
+        delay = (len(self.thumbnails) - 1) * 100
+        QTimer.singleShot(delay, thumbnail.start_loading)
 
     def clear(self) -> None:
         """Clear all thumbnails."""
@@ -576,6 +577,7 @@ class ThumbnailCarousel(QScrollArea):
                 widget = child.widget()
                 if widget is not None:
                     widget.deleteLater()
+        self.thumbnails.clear()
 
 
 class CompressionStatsDialog(QDialog):
