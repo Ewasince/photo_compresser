@@ -5,111 +5,35 @@ Provides functionality for comparing pairs of images with interactive features.
 """
 
 import sys
-import os
-from typing import Optional, Tuple, List
 from pathlib import Path
 
-from PIL import Image
-from PyQt6.QtWidgets import (
-    QApplication,
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QScrollArea,
-    QLabel,
-    QPushButton,
-    QFileDialog,
-    QMessageBox,
-)
-from PyQt6.QtCore import Qt, QPoint, QRect, QSize, pyqtSignal
+from PyQt6.QtCore import QPoint, QRect, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import (
-    QPixmap,
+    QColor,
+    QMouseEvent,
     QPainter,
     QPen,
-    QColor,
+    QPixmap,
     QWheelEvent,
-    QMouseEvent,
-    QImage,
+)
+from PyQt6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
 
+from service.constants import SUPPORTED_EXTENSIONS
+from service.image_pair import ImagePair
 
-def pixmap_from_heic(path: str) -> QPixmap:
-    im = Image.open(path).convert("RGBA")
-    data = im.tobytes()  # байты RGBA
-    qimg = QImage(data, im.width, im.height, QImage.Format.Format_RGBA8888).copy()
-    return QPixmap.fromImage(qimg)
-
-
-class ImagePair:
-    """Represents a pair of images for comparison."""
-
-    def __init__(self, image1_path: str, image2_path: str, name: str = ""):
-        self.image1_path = image1_path
-        self.image2_path = image2_path
-        self.name = (
-            name
-            or f"{os.path.basename(image1_path)} vs {os.path.basename(image2_path)}"
-        )
-        self._pixmap1: Optional[QPixmap] = None
-        self._pixmap2: Optional[QPixmap] = None
-
-    def get_pixmap1(self) -> QPixmap:
-        """Get the first image pixmap, loading it if necessary."""
-        if self._pixmap1 is None:
-            self._pixmap1 = pixmap_from_heic(self.image1_path)
-        return self._pixmap1
-
-    def get_pixmap2(self) -> QPixmap:
-        """Get the second image pixmap, loading it if necessary."""
-        if self._pixmap2 is None:
-            self._pixmap2 = pixmap_from_heic(self.image2_path)
-        return self._pixmap2
-
-    def create_thumbnail(self, size: QSize = QSize(100, 100)) -> QPixmap:
-        """Create a thumbnail showing both images side by side."""
-        pixmap1 = self.get_pixmap1()
-        pixmap2 = self.get_pixmap2()
-
-        # Create a combined thumbnail
-        combined = QPixmap(size)
-        combined.fill(Qt.GlobalColor.white)
-
-        painter = QPainter(combined)
-
-        # Calculate thumbnail dimensions
-        thumb_width = size.width() // 2
-        thumb_height = size.height()
-
-        # Draw first image (left side)
-        scaled1 = pixmap1.scaled(
-            thumb_width,
-            thumb_height,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        x1 = (thumb_width - scaled1.width()) // 2
-        y1 = (thumb_height - scaled1.height()) // 2
-        painter.drawPixmap(x1, y1, scaled1)
-
-        # Draw second image (right side)
-        scaled2 = pixmap2.scaled(
-            thumb_width,
-            thumb_height,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        x2 = thumb_width + (thumb_width - scaled2.width()) // 2
-        y2 = (thumb_height - scaled2.height()) // 2
-        painter.drawPixmap(x2, y2, scaled2)
-
-        # Draw divider line
-        pen = QPen(QColor(100, 100, 100), 2)
-        painter.setPen(pen)
-        painter.drawLine(thumb_width, 0, thumb_width, thumb_height)
-
-        painter.end()
-        return combined
+FORMATS_PATTERNS = " ".join(f"*.{f}" for f in SUPPORTED_EXTENSIONS)
+FORMATS_PATTERN = f"Images ({FORMATS_PATTERNS})"
 
 
 class ComparisonViewer(QWidget):
@@ -121,7 +45,7 @@ class ComparisonViewer(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         # Image data
-        self.image_pair: Optional[ImagePair] = None
+        self.image_pair: ImagePair | None = None
         self.zoom_factor = 1.0
         self.pan_offset = QPoint(0, 0)
         self.slider_position = 0.5  # 0.0 = left, 1.0 = right
@@ -164,7 +88,7 @@ class ComparisonViewer(QWidget):
         """Get the rectangle where images should be displayed."""
         return self.rect().adjusted(10, 10, -10, -10)
 
-    def get_original_image_sizes(self) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    def get_original_image_sizes(self) -> tuple[tuple[int, int], tuple[int, int]]:
         """Get original dimensions of both images."""
         if not self.image_pair:
             return (0, 0), (0, 0)
@@ -174,7 +98,7 @@ class ComparisonViewer(QWidget):
 
         return (pixmap1.width(), pixmap1.height()), (pixmap2.width(), pixmap2.height())
 
-    def get_scaled_pixmaps(self) -> Tuple[QPixmap, QPixmap]:
+    def get_scaled_pixmaps(self) -> tuple[QPixmap, QPixmap]:
         """Get the scaled pixmaps for both images."""
         if not self.image_pair:
             return QPixmap(), QPixmap()
@@ -232,7 +156,7 @@ class ComparisonViewer(QWidget):
 
         return scaled1, scaled2
 
-    def paintEvent(self, event):
+    def paintEvent(self, event):  # noqa: ARG002
         """Custom paint event for drawing the comparison view."""
         if not self.image_pair:
             # Draw placeholder
@@ -254,12 +178,7 @@ class ComparisonViewer(QWidget):
             return
 
         # Additional safety checks
-        if (
-            pixmap1.width() <= 0
-            or pixmap1.height() <= 0
-            or pixmap2.width() <= 0
-            or pixmap2.height() <= 0
-        ):
+        if pixmap1.width() <= 0 or pixmap1.height() <= 0 or pixmap2.width() <= 0 or pixmap2.height() <= 0:
             return
 
         # Calculate display positions
@@ -279,16 +198,12 @@ class ComparisonViewer(QWidget):
         # Draw first image (left part)
         if split_x > img1_x:
             left_rect = QRect(img1_x, img1_y, split_x - img1_x, pixmap1.height())
-            painter.drawPixmap(
-                left_rect, pixmap1, QRect(0, 0, split_x - img1_x, pixmap1.height())
-            )
+            painter.drawPixmap(left_rect, pixmap1, QRect(0, 0, split_x - img1_x, pixmap1.height()))
 
         # Draw second image (right part)
         if split_x < img2_x + pixmap2.width():
-            right_rect = QRect(
-                split_x, img2_y, img2_x + pixmap2.width() - split_x, pixmap2.height()
-            )
-            right_source_x = int((split_x - img2_x))
+            right_rect = QRect(split_x, img2_y, img2_x + pixmap2.width() - split_x, pixmap2.height())
+            right_source_x = int(split_x - img2_x)
             if right_source_x >= 0 and right_source_x < pixmap2.width():
                 source_width = pixmap2.width() - right_source_x
                 if source_width > 0:
@@ -423,12 +338,12 @@ class ComparisonViewer(QWidget):
     def draw_image_resolutions(
         self,
         painter: QPainter,
-        display_rect: QRect,
+        display_rect: QRect,  # noqa: ARG002
         img1_x: int,
         img1_y: int,
         img2_x: int,
         img2_y: int,
-        scaled_width1: int,
+        scaled_width1: int,  # noqa: ARG002
         scaled_height1: int,
         scaled_width2: int,
         scaled_height2: int,
@@ -438,9 +353,7 @@ class ComparisonViewer(QWidget):
             return
 
         # Get original image sizes
-        (orig_width1, orig_height1), (orig_width2, orig_height2) = (
-            self.get_original_image_sizes()
-        )
+        (orig_width1, orig_height1), (orig_width2, orig_height2) = self.get_original_image_sizes()
 
         # Set up font and colors for resolution text
         font = painter.font()
@@ -465,14 +378,10 @@ class ComparisonViewer(QWidget):
 
         # Resolution text for right image (bottom right)
         right_resolution_text = f"{orig_width2} × {orig_height2}"
-        right_text_rect = QRect(
-            img2_x + scaled_width2 - 210, img2_y + scaled_height2 - 40, 200, 30
-        )
+        right_text_rect = QRect(img2_x + scaled_width2 - 210, img2_y + scaled_height2 - 40, 200, 30)
 
         # Draw background rectangle for right resolution
-        painter.fillRect(
-            right_text_rect, QColor(0, 0, 0, 180)
-        )  # Semi-transparent black
+        painter.fillRect(right_text_rect, QColor(0, 0, 0, 180))  # Semi-transparent black
         painter.drawText(
             right_text_rect,
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
@@ -507,7 +416,7 @@ class ThumbnailWidget(QWidget):
             }
         """)
 
-    def paintEvent(self, event):
+    def paintEvent(self, event):  # noqa: ARG002
         """Draw the thumbnail."""
         painter = QPainter(self)
 
@@ -526,9 +435,7 @@ class ThumbnailWidget(QWidget):
         painter.drawText(
             text_rect,
             Qt.AlignmentFlag.AlignCenter,
-            self.image_pair.name[:15] + "..."
-            if len(self.image_pair.name) > 15
-            else self.image_pair.name,
+            self.image_pair.name[:15] + "..." if len(self.image_pair.name) > 15 else self.image_pair.name,
         )
 
     def mousePressEvent(self, event: QMouseEvent):
@@ -594,9 +501,9 @@ class ThumbnailCarousel(QScrollArea):
 class ComparisonWindow(QMainWindow):
     """Window for image comparison functionality."""
 
-    def __init__(self, image_pairs: List[ImagePair] = None, settings_file: Path = None):
+    def __init__(self, image_pairs: list[ImagePair] | None = None, settings_file: Path | None = None):
         super().__init__()
-        self.image_pairs: List[ImagePair] = image_pairs or []
+        self.image_pairs: list[ImagePair] = image_pairs or []
         self.current_pair_index = -1
         self.settings_file = settings_file
 
@@ -711,7 +618,7 @@ class ComparisonWindow(QMainWindow):
         self.settings_button.clicked.connect(self.view_settings)
         self.carousel.thumbnail_clicked.connect(self.load_image_pair_from_thumbnail)
 
-    def load_image_pairs(self, image_pairs: List[ImagePair]):
+    def load_image_pairs(self, image_pairs: list[ImagePair]):
         """Load multiple image pairs."""
         self.image_pairs = image_pairs
         self.carousel.clear()
@@ -731,7 +638,7 @@ class ComparisonWindow(QMainWindow):
             self,
             "Select First Image",
             "",
-            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.tif *.webp *.avif *.heic *.heif *.ico *.ppm *.ppm *.pgm *.pbm)",
+            FORMATS_PATTERN,
         )
 
         if not file1:
@@ -742,7 +649,7 @@ class ComparisonWindow(QMainWindow):
             self,
             "Select Second Image",
             "",
-            "Images (*.png *.jpg *.jpeg *.bmp *.gif *.tiff *.tif *.webp *.avif *.heic *.heif *.ico *.ppm *.ppm *.pgm *.pbm)",
+            FORMATS_PATTERN,
         )
 
         if not file2:
@@ -773,15 +680,10 @@ class ComparisonWindow(QMainWindow):
     def update_status(self):
         """Update the status label."""
         if self.image_pairs:
-            current_pair = (
-                self.image_pairs[self.current_pair_index]
-                if self.current_pair_index >= 0
-                else None
-            )
+            current_pair = self.image_pairs[self.current_pair_index] if self.current_pair_index >= 0 else None
             if current_pair:
                 self.status_label.setText(
-                    f"Showing: {current_pair.name} "
-                    f"({self.current_pair_index + 1}/{len(self.image_pairs)})"
+                    f"Showing: {current_pair.name} ({self.current_pair_index + 1}/{len(self.image_pairs)})"
                 )
             else:
                 self.status_label.setText(f"Loaded {len(self.image_pairs)} image pairs")
@@ -791,9 +693,7 @@ class ComparisonWindow(QMainWindow):
     def view_settings(self):
         """View compression settings."""
         if not self.settings_file or not self.settings_file.exists():
-            QMessageBox.information(
-                self, "No Settings", "No compression settings file found."
-            )
+            QMessageBox.information(self, "No Settings", "No compression settings file found.")
             return
 
         try:
@@ -802,9 +702,7 @@ class ComparisonWindow(QMainWindow):
             settings_data = load_compression_settings(self.settings_file)
 
             if not settings_data:
-                QMessageBox.warning(
-                    self, "Error", "Failed to load compression settings."
-                )
+                QMessageBox.warning(self, "Error", "Failed to load compression settings.")
                 return
 
             # Format settings for display
@@ -828,12 +726,10 @@ Total Image Pairs: {settings_data.get("total_pairs", "N/A")}
             QMessageBox.information(self, "Compression Settings", settings_text)
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to view settings:\n\n{str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to view settings:\n\n{e!s}")
 
 
-def show_comparison_window(
-    image_pairs: List[ImagePair] = None, settings_file: Path = None
-):
+def show_comparison_window(image_pairs: list[ImagePair] | None = None, settings_file: Path | None = None):
     """Show the comparison window with optional image pairs."""
     app = QApplication.instance()
     if app is None:

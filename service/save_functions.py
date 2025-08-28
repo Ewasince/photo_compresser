@@ -1,16 +1,10 @@
-from pathlib import Path
-from typing import Optional, Union
-from PIL import Image
 import os  # ← для os.utime
+from pathlib import Path
 
-# Если используете pillow-avif-plugin — просто импортируйте его где-то один раз.
-try:
-    import pillow_avif  # noqa: F401
-except Exception:
-    pass
+import pillow_avif  # noqa: F401
+from PIL import Image
 
 
-# ────────────────────────────────────────────────────────────────────────────────
 # ВСПОМОГАТЕЛЬНОЕ: аккуратно убирать альфу для JPEG
 def _flatten_for_jpeg(im: Image.Image, background=(255, 255, 255)) -> Image.Image:
     """
@@ -18,31 +12,28 @@ def _flatten_for_jpeg(im: Image.Image, background=(255, 255, 255)) -> Image.Imag
     """
     if im.mode in ("RGBA", "LA") or (im.mode == "P" and "transparency" in im.info):
         bg = Image.new("RGB", im.size, background)
-        return Image.alpha_composite(bg.convert("RGBA"), im.convert("RGBA")).convert(
-            "RGB"
-        )
+        return Image.alpha_composite(bg.convert("RGBA"), im.convert("RGBA")).convert("RGB")
     return im.convert("RGB") if im.mode not in ("RGB", "L") else im
 
 
-def _copy_times_from_src(src: Union[str, Path], dst: Union[str, Path]) -> None:
+def _copy_times_from_src(src: Path, dst: Path) -> None:
     """Копирует atime/mtime исходного файла на новый файл (через os.utime)."""
-    st = os.stat(src)
+    st = src.stat()
     os.utime(dst, ns=(st.st_atime_ns, st.st_mtime_ns))
 
 
-# ────────────────────────────────────────────────────────────────────────────────
 # JPEG
 def save_jpeg(
     im: Image,
-    src: Union[str, Path],
-    dst: Union[str, Path],
+    src: Path,
+    dst: Path,
     *,
     quality: int = 75,  # [БАЗОВЫЙ] 0–100 (дефолт Pillow: 75). Ниже → сильнее сжатие
-    subsampling: Union[int, str] = -1,
+    subsampling: int | str = -1,
     # [ПРО] -1 (авто/как решит кодек), 2="4:2:0", 1="4:2:2", 0="4:4:4", либо строкой "4:2:0" и т.п.
     progressive: bool = False,  # [БАЗОВЫЙ] False/True. Прогрессивная запись, иногда минус кб
     optimize: bool = False,  # [ПРО] False/True. Оптимизация Хаффмана → чуть меньше файл
-    qtables: Optional[dict] = None,  # [ПРО] Кастомные квант-таблицы (обычно не трогаем)
+    qtables: dict | None = None,  # [ПРО] Кастомные квант-таблицы (обычно не трогаем)
     smooth: int = 0,  # [ПРО] 0–100. Лёгкое сглаживание (меньше шум → лучше сжимается)
     keep_rgb: bool = False,  # [ПРО] Сохранить в RGB (без YCbCr). Может ↑размер, но убирает переход
 ):
@@ -61,15 +52,15 @@ def save_jpeg(
     xmp = im.info.get("xmp")
 
     # Собираем kwargs только из «влияющих» параметров
-    kwargs = dict(
-        quality=quality,  # 0–100 (дефолт 75)
-        subsampling=subsampling,  # -1, 0/1/2 или "4:4:4" и т.п.
-        progressive=progressive,  # False по умолчанию
-        optimize=optimize,  # False по умолчанию
-        qtables=qtables,  # None по умолчанию
-        smooth=smooth,  # 0 по умолчанию
-        keep_rgb=keep_rgb,  # False по умолчанию
-    )
+    kwargs = {
+        "quality": quality,  # 0–100 (дефолт 75)
+        "subsampling": subsampling,  # -1, 0/1/2 или "4:4:4" и т.п.
+        "progressive": progressive,  # False по умолчанию
+        "optimize": optimize,  # False по умолчанию
+        "qtables": qtables,  # None по умолчанию
+        "smooth": smooth,  # 0 по умолчанию
+        "keep_rgb": keep_rgb,  # False по умолчанию
+    }
 
     # Сохраняем метаданные источника без изменений
     if exif:
@@ -85,12 +76,11 @@ def save_jpeg(
     _copy_times_from_src(src, dst)
 
 
-# ────────────────────────────────────────────────────────────────────────────────
 # WebP
 def save_webp(
     im: Image,
-    src: Union[str, Path],
-    dst: Union[str, Path],
+    src: str | Path,
+    dst: str | Path,
     *,
     lossless: bool = False,  # [БАЗОВЫЙ] False/True. Влияет радикально на метод сжатия
     quality: int = 80,  # [БАЗОВЫЙ] 0–100. Для lossless — «усилие» (0–100), дефолт 80
@@ -112,13 +102,13 @@ def save_webp(
     icc_profile = im.info.get("icc_profile")
     xmp = im.info.get("xmp")
 
-    kwargs = dict(
-        lossless=lossless,  # False
-        quality=quality,  # 0–100 (80)
-        method=method,  # 0–6 (4)
-        alpha_quality=alpha_quality,  # 0–100 (100)
-        exact=exact,  # False
-    )
+    kwargs = {
+        "lossless": lossless,  # False
+        "quality": quality,  # 0–100 (80)
+        "method": method,  # 0–6 (4)
+        "alpha_quality": alpha_quality,  # 0–100 (100)
+        "exact": exact,  # False
+    }
 
     # Сохраняем метаданные источника без изменений
     if exif:
@@ -138,8 +128,8 @@ def save_webp(
 # AVIF (через pillow-avif-plugin; в официальном Pillow — аналогично по ключам)
 def save_avif(
     im: Image,
-    src: Union[str, Path],
-    dst: Union[str, Path],
+    src: str | Path,
+    dst: str | Path,
     *,
     quality: int = 75,  # [БАЗОВЫЙ] 0–100 (дефолт 75). Ниже → сильнее сжатие
     subsampling: str = "4:2:0",  # [БАЗОВЫЙ] "4:2:0" (дефолт) | "4:2:2" | "4:4:4" | "4:0:0"
@@ -164,15 +154,15 @@ def save_avif(
     icc_profile = im.info.get("icc_profile")
     xmp = im.info.get("xmp")
 
-    kwargs = dict(
-        quality=quality,  # 0–100 (75)
-        subsampling=subsampling,  # "4:2:0" (деф.), "4:2:2", "4:4:4", "4:0:0"
-        speed=speed,  # 0–10 (6)
-        codec=codec,  # "auto"
-        range=range_,  # "full"
-        qmin=qmin,  # -1
-        qmax=qmax,  # -1
-    )
+    kwargs = {
+        "quality": quality,  # 0–100 (75)
+        "subsampling": subsampling,  # "4:2:0" (деф.), "4:2:2", "4:4:4", "4:0:0"
+        "speed": speed,  # 0–10 (6)
+        "codec": codec,  # "auto"
+        "range": range_,  # "full"
+        "qmin": qmin,  # -1
+        "qmax": qmax,  # -1
+    }
 
     # Тайлинг: по умолчанию autotiling=True (соответствует поведению плагина)
     if autotiling:

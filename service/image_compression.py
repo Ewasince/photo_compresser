@@ -4,40 +4,22 @@ Image Compression Module
 Handles image compression with configurable quality and size parameters.
 """
 
-from pathlib import Path
-from typing import List, Tuple, Optional, Dict, Any
-from PIL import Image
 import logging
-from save_functions import save_jpeg, save_webp, save_avif
+from pathlib import Path
+from typing import Any
 
+from PIL import Image
 from pillow_heif import register_heif_opener
+
+from service.constants import SUPPORTED_EXTENSIONS
+from service.save_functions import save_avif, save_jpeg, save_webp
 
 register_heif_opener()
 
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
-
-supported_extensions = {
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".bmp",
-    ".tiff",
-    ".tif",
-    ".webp",
-    ".avif",
-    ".heic",
-    ".heif",
-    ".gif",
-    ".ico",
-    ".ppm",
-    ".pgm",
-    ".pbm",
-}
 
 
 class ImageCompressor:
@@ -93,15 +75,10 @@ class ImageCompressor:
                 smallest_side = min(width, height)
 
                 # Check if image needs resizing
-                needs_resize = (
-                    largest_side > self.max_largest_side
-                    or smallest_side > self.max_smallest_side
-                )
+                needs_resize = largest_side > self.max_largest_side or smallest_side > self.max_smallest_side
 
                 # Check if image needs quality compression (for all formats)
-                needs_quality_compression = (
-                    True  # Always recompress to ensure quality settings
-                )
+                needs_quality_compression = True  # Always recompress to ensure quality settings
 
                 return needs_resize or needs_quality_compression
 
@@ -147,9 +124,7 @@ class ImageCompressor:
                 # Resize image if needed
                 if new_width != width or new_height != height:
                     img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                    logger.info(
-                        f"Resized {input_path.name} from {width}x{height} to {new_width}x{new_height}"
-                    )
+                    logger.info(f"Resized {input_path.name} from {width}x{height} to {new_width}x{new_height}")
 
                 # Ensure output directory exists
                 output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -157,21 +132,18 @@ class ImageCompressor:
                 # Use custom save functions if available
                 if self.output_format == "JPEG":
                     return self._save_jpeg_custom(img, input_path, output_path)
-                elif self.output_format == "WEBP":
+                if self.output_format == "WEBP":
                     return self._save_webp_custom(img, input_path, output_path)
-                elif self.output_format == "AVIF":
+                if self.output_format == "AVIF":
                     return self._save_avif_custom(img, input_path, output_path)
-                else:
-                    # Fallback to basic Pillow saving
-                    return self._save_basic(img, output_path)
+                # Fallback to basic Pillow saving
+                return self._save_basic(img, output_path)
 
         except Exception as e:
             logger.exception(f"Error compressing {input_path}: {e}")
             return False
 
-    def _save_jpeg_custom(
-        self, img: Image.Image, input_path: Path, output_path: Path
-    ) -> bool:
+    def _save_jpeg_custom(self, img: Image.Image, input_path: Path, output_path: Path) -> bool:
         """Save image using custom JPEG save function."""
         try:
             # Convert to RGB if necessary
@@ -197,9 +169,7 @@ class ImageCompressor:
             logger.error(f"Error in custom JPEG save: {e}")
             return False
 
-    def _save_webp_custom(
-        self, img: Image.Image, input_path: Path, output_path: Path
-    ) -> bool:
+    def _save_webp_custom(self, img: Image.Image, input_path: Path, output_path: Path) -> bool:
         """Save image using custom WebP save function."""
         try:
             # Prepare parameters
@@ -220,9 +190,7 @@ class ImageCompressor:
             logger.error(f"Error in custom WebP save: {e}")
             return False
 
-    def _save_avif_custom(
-        self, img: Image.Image, input_path: Path, output_path: Path
-    ) -> bool:
+    def _save_avif_custom(self, img: Image.Image, input_path: Path, output_path: Path) -> bool:
         """Save image using custom AVIF save function."""
         try:
             # Prepare parameters
@@ -268,9 +236,7 @@ class ImageCompressor:
                     img.save(output_path, "AVIF", quality=self.quality)
                 except Exception:
                     # Fallback to JPEG if AVIF fails
-                    logger.warning(
-                        f"AVIF save failed, falling back to JPEG for {output_path.name}"
-                    )
+                    logger.warning(f"AVIF save failed, falling back to JPEG for {output_path.name}")
                     output_path = output_path.with_suffix(".jpg")
                     img.save(output_path, "JPEG", quality=self.quality, optimize=True)
             else:
@@ -292,9 +258,7 @@ class ImageCompressor:
             return ".avif"
         return ".jpg"  # Default fallback
 
-    def process_directory(
-        self, input_root: Path, output_root: Path
-    ) -> Tuple[int, int, List[Path]]:
+    def process_directory(self, input_root: Path, output_root: Path) -> tuple[int, int, list[Path]]:
         """
         Process a directory recursively, compressing all supported images.
 
@@ -314,7 +278,7 @@ class ImageCompressor:
 
         # Walk through input directory
         for file_path in input_root.rglob("*"):
-            if file_path.is_file() and file_path.suffix.lower() in supported_extensions:
+            if file_path.is_file() and file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
                 total_files += 1
 
                 # Determine output file path
@@ -334,9 +298,7 @@ class ImageCompressor:
 
                     # If file exists, add counter
                     while output_file.exists():
-                        output_file = (
-                            output_root / f"{base_name}_{counter}{new_extension}"
-                        )
+                        output_file = output_root / f"{base_name}_{counter}{new_extension}"
                         counter += 1
 
                 # Compress the image
@@ -347,29 +309,19 @@ class ImageCompressor:
                 else:
                     logger.warning(f"Failed to compress: {file_path.name}")
 
-        logger.info(
-            f"Compression complete: {compressed_files}/{total_files} files processed"
-        )
+        logger.info(f"Compression complete: {compressed_files}/{total_files} files processed")
         return total_files, compressed_files, compressed_paths
 
-    def get_compression_stats(
-        self, input_dir: Path, output_dir: Path
-    ) -> Dict[str, Any]:
+    def get_compression_stats(self, input_dir: Path, output_dir: Path) -> dict[str, Any]:
         """Get compression statistics."""
         try:
-            input_size = sum(
-                f.stat().st_size for f in input_dir.rglob("*") if f.is_file()
-            )
-            output_size = sum(
-                f.stat().st_size for f in output_dir.rglob("*") if f.is_file()
-            )
+            input_size = sum(f.stat().st_size for f in input_dir.rglob("*") if f.is_file())
+            output_size = sum(f.stat().st_size for f in output_dir.rglob("*") if f.is_file())
 
             input_size_mb = input_size / (1024 * 1024)
             output_size_mb = output_size / (1024 * 1024)
             space_saved_mb = input_size_mb - output_size_mb
-            compression_ratio_percent = (
-                ((input_size - output_size) / input_size) * 100 if input_size > 0 else 0
-            )
+            compression_ratio_percent = ((input_size - output_size) / input_size) * 100 if input_size > 0 else 0
 
             return {
                 "input_size_mb": input_size_mb,
@@ -387,9 +339,7 @@ class ImageCompressor:
             }
 
 
-def create_image_pairs(
-    compressed_dir: Path, original_dir: Path = None
-) -> List[Tuple[Path, Path]]:
+def create_image_pairs(compressed_dir: Path, original_dir: Path | None = None) -> list[tuple[Path, Path]]:
     """
     Create pairs of original and compressed images for comparison.
 
@@ -411,7 +361,7 @@ def create_image_pairs(
     # Get all compressed image files
     compressed_files = []
     for file_path in compressed_dir.rglob("*"):
-        if file_path.is_file() and file_path.suffix.lower() in supported_extensions:
+        if file_path.is_file() and file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
             compressed_files.append(file_path)
 
     logger.info(f"Found {len(compressed_files)} compressed files")
@@ -429,32 +379,25 @@ def create_image_pairs(
                 # If original file doesn't exist, try with different extensions
                 if not original_file.exists():
                     # Try common image extensions
-                    for ext in supported_extensions:
+                    for ext in SUPPORTED_EXTENSIONS:
                         test_path = original_file.with_suffix(ext)
                         if test_path.exists():
                             original_file = test_path
                             break
 
                 # If still not found and we're in flattened mode, search recursively
-                if (
-                    not original_file.exists()
-                    and compressed_file.parent == compressed_dir
-                ):
+                if not original_file.exists() and compressed_file.parent == compressed_dir:
                     # Search recursively in original directory
                     for search_file in original_dir.rglob(compressed_file.stem + "*"):
-                        if search_file.suffix.lower() in supported_extensions:
+                        if search_file.suffix.lower() in SUPPORTED_EXTENSIONS:
                             original_file = search_file
                             break
 
                 if original_file.exists():
                     image_pairs.append((original_file, compressed_file))
-                    logger.info(
-                        f"Created pair: {original_file.name} <-> {compressed_file.name}"
-                    )
+                    logger.info(f"Created pair: {original_file.name} <-> {compressed_file.name}")
                 else:
-                    logger.warning(
-                        f"Original file not found for: {compressed_file.name}"
-                    )
+                    logger.warning(f"Original file not found for: {compressed_file.name}")
                     # Fallback: use compressed file for both
                     image_pairs.append((compressed_file, compressed_file))
             else:
@@ -472,7 +415,7 @@ def create_image_pairs(
 def save_compression_settings(
     output_dir: Path,
     compression_settings: dict,
-    image_pairs: List[Tuple[Path, Path]],
+    image_pairs: list[tuple[Path, Path]],
     stats: dict,
 ):
     """
@@ -504,7 +447,7 @@ def save_compression_settings(
 
     settings_file = output_dir / "compression_settings.json"
     try:
-        with open(settings_file, "w", encoding="utf-8") as f:
+        with settings_file.open("w") as f:
             json.dump(settings_data, f, indent=2, ensure_ascii=False)
         logger.info(f"Compression settings saved to: {settings_file}")
         return settings_file
@@ -513,7 +456,7 @@ def save_compression_settings(
         return None
 
 
-def load_compression_settings(settings_file: Path) -> Optional[dict]:
+def load_compression_settings(settings_file: Path) -> dict | None:
     """
     Load compression settings from a JSON file.
 
@@ -526,7 +469,7 @@ def load_compression_settings(settings_file: Path) -> Optional[dict]:
     import json
 
     try:
-        with open(settings_file, "r", encoding="utf-8") as f:
+        with settings_file.open() as f:
             return json.load(f)
     except Exception as e:
         logger.error(f"Failed to load compression settings: {e}")

@@ -7,36 +7,38 @@ Main application for compressing images with configurable parameters.
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, Union
-from PyQt6.QtWidgets import (
-    QApplication,
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLabel,
-    QPushButton,
-    QFileDialog,
-    QSpinBox,
-    QProgressBar,
-    QTextEdit,
-    QGroupBox,
-    QGridLayout,
-    QMessageBox,
-    QCheckBox,
-    QComboBox,
-    QScrollArea,
-)
+from typing import Any
+
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont
+from PyQt6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from service.image_comparison import ImagePair, show_comparison_window
 
 # Import our modules
-from image_compression import (
+from service.image_compression import (
     ImageCompressor,
     create_image_pairs,
     save_compression_settings,
 )
-from image_comparison import ImagePair, show_comparison_window
 
 
 class CompressionWorker(QThread):
@@ -66,14 +68,12 @@ class CompressionWorker(QThread):
             self.status_updated.emit("Starting compression...")
 
             # Process the directory
-            total_files, compressed_files, compressed_paths = (
-                self.compressor.process_directory(self.input_dir, self.output_dir)
+            total_files, compressed_files, compressed_paths = self.compressor.process_directory(
+                self.input_dir, self.output_dir
             )
 
             # Get compression statistics
-            stats = self.compressor.get_compression_stats(
-                self.input_dir, self.output_dir
-            )
+            stats = self.compressor.get_compression_stats(self.input_dir, self.output_dir)
             stats["total_files"] = total_files
             stats["compressed_files"] = compressed_files
 
@@ -82,17 +82,13 @@ class CompressionWorker(QThread):
 
             # Save compression settings
             if image_pairs:
-                save_compression_settings(
-                    self.output_dir, self.compression_settings, image_pairs, stats
-                )
+                save_compression_settings(self.output_dir, self.compression_settings, image_pairs, stats)
 
-            self.status_updated.emit(
-                f"Compression completed! {compressed_files}/{total_files} files compressed."
-            )
+            self.status_updated.emit(f"Compression completed! {compressed_files}/{total_files} files compressed.")
             self.compression_finished.emit(stats)
 
         except Exception as e:
-            self.error_occurred.emit(f"Compression error: {str(e)}")
+            self.error_occurred.emit(f"Compression error: {e!s}")
 
 
 class MainWindow(QMainWindow):
@@ -208,12 +204,8 @@ class MainWindow(QMainWindow):
         self.quality_spinbox.setRange(1, 100)
         self.quality_spinbox.setValue(75)
         self.quality_spinbox.setSuffix("%")
-        self.quality_spinbox.setStyleSheet(
-            "padding: 5px; border: 1px solid #ccc; border-radius: 4px;"
-        )
-        self.quality_spinbox.setToolTip(
-            "Quality level (1-100). Lower values = stronger compression, smaller files"
-        )
+        self.quality_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
+        self.quality_spinbox.setToolTip("Quality level (1-100). Lower values = stronger compression, smaller files")
         self.basic_layout.addWidget(self.quality_spinbox, 0, 1)
 
         # Max largest side
@@ -221,12 +213,8 @@ class MainWindow(QMainWindow):
         self.max_largest_spinbox = QSpinBox()
         self.max_largest_spinbox.setRange(100, 10000)
         self.max_largest_spinbox.setValue(1920)
-        self.max_largest_spinbox.setStyleSheet(
-            "padding: 5px; border: 1px solid #ccc; border-radius: 4px;"
-        )
-        self.max_largest_spinbox.setToolTip(
-            "Maximum size of the largest side in pixels"
-        )
+        self.max_largest_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
+        self.max_largest_spinbox.setToolTip("Maximum size of the largest side in pixels")
         self.basic_layout.addWidget(self.max_largest_spinbox, 1, 1)
 
         # Max smallest side
@@ -234,21 +222,15 @@ class MainWindow(QMainWindow):
         self.max_smallest_spinbox = QSpinBox()
         self.max_smallest_spinbox.setRange(100, 10000)
         self.max_smallest_spinbox.setValue(1080)
-        self.max_smallest_spinbox.setStyleSheet(
-            "padding: 5px; border: 1px solid #ccc; border-radius: 4px;"
-        )
-        self.max_smallest_spinbox.setToolTip(
-            "Maximum size of the smallest side in pixels"
-        )
+        self.max_smallest_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
+        self.max_smallest_spinbox.setToolTip("Maximum size of the smallest side in pixels")
         self.basic_layout.addWidget(self.max_smallest_spinbox, 2, 1)
 
         # Output format
         self.basic_layout.addWidget(QLabel("Output Format:"), 3, 0)
         self.format_combo = QComboBox()
         self.format_combo.addItems(["JPEG", "WebP", "AVIF"])
-        self.format_combo.setStyleSheet(
-            "padding: 5px; border: 1px solid #ccc; border-radius: 4px;"
-        )
+        self.format_combo.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
         self.format_combo.setToolTip("Output image format")
         self.basic_layout.addWidget(self.format_combo, 3, 1)
 
@@ -358,7 +340,14 @@ class MainWindow(QMainWindow):
         self.update_format_specific_settings()
 
     def create_format_specific_settings(self):
-        """Create format-specific parameter groups."""
+        # Store all widgets for easy access
+        self.parameter_widgets = {
+            "jpeg": self._setup_advanced_for_jpeg(),
+            "webp": self._setup_advanced_for_webp(),
+            "avif": self._setup_advanced_for_avif(),
+        }
+
+    def _setup_advanced_for_jpeg(self) -> dict:
         # JPEG Settings
         self.jpeg_group = QGroupBox("JPEG Advanced Settings")
         self.jpeg_group.setVisible(False)
@@ -368,21 +357,15 @@ class MainWindow(QMainWindow):
         jpeg_layout.addWidget(QLabel("Progressive:"), 0, 0)
         self.jpeg_progressive = QCheckBox()
         self.jpeg_progressive.setChecked(False)
-        self.jpeg_progressive.setToolTip(
-            "Progressive JPEG encoding. Sometimes reduces file size"
-        )
+        self.jpeg_progressive.setToolTip("Progressive JPEG encoding. Sometimes reduces file size")
         jpeg_layout.addWidget(self.jpeg_progressive, 0, 1)
 
         # Subsampling
         jpeg_layout.addWidget(QLabel("Subsampling:"), 1, 0)
         self.jpeg_subsampling = QComboBox()
-        self.jpeg_subsampling.addItems(
-            ["Auto (-1)", "4:4:4 (0)", "4:2:2 (1)", "4:2:0 (2)"]
-        )
+        self.jpeg_subsampling.addItems(["Auto (-1)", "4:4:4 (0)", "4:2:2 (1)", "4:2:0 (2)"])
         self.jpeg_subsampling.setCurrentText("Auto (-1)")
-        self.jpeg_subsampling.setToolTip(
-            "Color subsampling. 4:4:4 = best quality, 4:2:0 = best compression"
-        )
+        self.jpeg_subsampling.setToolTip("Color subsampling. 4:4:4 = best quality, 4:2:0 = best compression")
         jpeg_layout.addWidget(self.jpeg_subsampling, 1, 1)
 
         # Optimize
@@ -397,22 +380,26 @@ class MainWindow(QMainWindow):
         self.jpeg_smooth = QSpinBox()
         self.jpeg_smooth.setRange(0, 100)
         self.jpeg_smooth.setValue(0)
-        self.jpeg_smooth.setToolTip(
-            "Light smoothing (0-100). Reduces noise for better compression"
-        )
+        self.jpeg_smooth.setToolTip("Light smoothing (0-100). Reduces noise for better compression")
         jpeg_layout.addWidget(self.jpeg_smooth, 3, 1)
 
         # Keep RGB
         jpeg_layout.addWidget(QLabel("Keep RGB:"), 4, 0)
         self.jpeg_keep_rgb = QCheckBox()
         self.jpeg_keep_rgb.setChecked(False)
-        self.jpeg_keep_rgb.setToolTip(
-            "Save in RGB instead of YCbCr. May increase size but removes color transitions"
-        )
+        self.jpeg_keep_rgb.setToolTip("Save in RGB instead of YCbCr. May increase size but removes color transitions")
         jpeg_layout.addWidget(self.jpeg_keep_rgb, 4, 1)
 
         self.settings_layout.addWidget(self.jpeg_group)
+        return {
+            "progressive": self.jpeg_progressive,
+            "subsampling": self.jpeg_subsampling,
+            "optimize": self.jpeg_optimize,
+            "smooth": self.jpeg_smooth,
+            "keep_rgb": self.jpeg_keep_rgb,
+        }
 
+    def _setup_advanced_for_webp(self) -> dict:
         # WebP Settings
         self.webp_group = QGroupBox("WebP Advanced Settings")
         self.webp_group.setVisible(False)
@@ -422,9 +409,7 @@ class MainWindow(QMainWindow):
         webp_layout.addWidget(QLabel("Lossless:"), 0, 0)
         self.webp_lossless = QCheckBox()
         self.webp_lossless.setChecked(False)
-        self.webp_lossless.setToolTip(
-            "Lossless compression. Radically changes compression method"
-        )
+        self.webp_lossless.setToolTip("Lossless compression. Radically changes compression method")
         webp_layout.addWidget(self.webp_lossless, 0, 1)
 
         # Method
@@ -432,9 +417,7 @@ class MainWindow(QMainWindow):
         self.webp_method = QSpinBox()
         self.webp_method.setRange(0, 6)
         self.webp_method.setValue(4)
-        self.webp_method.setToolTip(
-            "Compression method (0-6). Slower = better compression at same quality"
-        )
+        self.webp_method.setToolTip("Compression method (0-6). Slower = better compression at same quality")
         webp_layout.addWidget(self.webp_method, 1, 1)
 
         # Alpha Quality
@@ -449,13 +432,18 @@ class MainWindow(QMainWindow):
         webp_layout.addWidget(QLabel("Exact:"), 3, 0)
         self.webp_exact = QCheckBox()
         self.webp_exact.setChecked(False)
-        self.webp_exact.setToolTip(
-            "Save RGB under transparency. Increases size but improves quality"
-        )
+        self.webp_exact.setToolTip("Save RGB under transparency. Increases size but improves quality")
         webp_layout.addWidget(self.webp_exact, 3, 1)
-
         self.settings_layout.addWidget(self.webp_group)
 
+        return {
+            "lossless": self.webp_lossless,
+            "method": self.webp_method,
+            "alpha_quality": self.webp_alpha_quality,
+            "exact": self.webp_exact,
+        }
+
+    def _setup_advanced_for_avif(self) -> dict:
         # AVIF Settings
         self.avif_group = QGroupBox("AVIF Advanced Settings")
         self.avif_group.setVisible(False)
@@ -466,9 +454,7 @@ class MainWindow(QMainWindow):
         self.avif_subsampling = QComboBox()
         self.avif_subsampling.addItems(["4:2:0", "4:2:2", "4:4:4", "4:0:0"])
         self.avif_subsampling.setCurrentText("4:2:0")
-        self.avif_subsampling.setToolTip(
-            "Color subsampling. 4:4:4 = best quality, 4:2:0 = best compression"
-        )
+        self.avif_subsampling.setToolTip("Color subsampling. 4:4:4 = best quality, 4:2:0 = best compression")
         avif_layout.addWidget(self.avif_subsampling, 0, 1)
 
         # Speed
@@ -476,9 +462,7 @@ class MainWindow(QMainWindow):
         self.avif_speed = QSpinBox()
         self.avif_speed.setRange(0, 10)
         self.avif_speed.setValue(6)
-        self.avif_speed.setToolTip(
-            "Encoding speed (0-10). 0 = slower/better, 10 = faster/worse"
-        )
+        self.avif_speed.setToolTip("Encoding speed (0-10). 0 = slower/better, 10 = faster/worse")
         avif_layout.addWidget(self.avif_speed, 1, 1)
 
         # Codec
@@ -502,9 +486,7 @@ class MainWindow(QMainWindow):
         self.avif_qmin = QSpinBox()
         self.avif_qmin.setRange(-1, 63)
         self.avif_qmin.setValue(-1)
-        self.avif_qmin.setToolTip(
-            "Minimum quantizer (-1 = auto, 0-63 = hard lower bound)"
-        )
+        self.avif_qmin.setToolTip("Minimum quantizer (-1 = auto, 0-63 = hard lower bound)")
         avif_layout.addWidget(self.avif_qmin, 4, 1)
 
         # QMax
@@ -537,35 +519,18 @@ class MainWindow(QMainWindow):
         self.avif_tile_cols.setValue(0)
         self.avif_tile_cols.setToolTip("Explicit tile columns (if auto tiling = false)")
         avif_layout.addWidget(self.avif_tile_cols, 8, 1)
-
         self.settings_layout.addWidget(self.avif_group)
 
-        # Store all widgets for easy access
-        self.parameter_widgets = {
-            "jpeg": {
-                "progressive": self.jpeg_progressive,
-                "subsampling": self.jpeg_subsampling,
-                "optimize": self.jpeg_optimize,
-                "smooth": self.jpeg_smooth,
-                "keep_rgb": self.jpeg_keep_rgb,
-            },
-            "webp": {
-                "lossless": self.webp_lossless,
-                "method": self.webp_method,
-                "alpha_quality": self.webp_alpha_quality,
-                "exact": self.webp_exact,
-            },
-            "avif": {
-                "subsampling": self.avif_subsampling,
-                "speed": self.avif_speed,
-                "codec": self.avif_codec,
-                "range": self.avif_range,
-                "qmin": self.avif_qmin,
-                "qmax": self.avif_qmax,
-                "autotiling": self.avif_autotiling,
-                "tile_rows": self.avif_tile_rows,
-                "tile_cols": self.avif_tile_cols,
-            },
+        return {
+            "subsampling": self.avif_subsampling,
+            "speed": self.avif_speed,
+            "codec": self.avif_codec,
+            "range": self.avif_range,
+            "qmin": self.avif_qmin,
+            "qmax": self.avif_qmax,
+            "autotiling": self.avif_autotiling,
+            "tile_rows": self.avif_tile_rows,
+            "tile_cols": self.avif_tile_cols,
         }
 
     def update_format_specific_settings(self):
@@ -590,9 +555,7 @@ class MainWindow(QMainWindow):
         self.select_input_btn.clicked.connect(self.select_input_directory)
         self.compress_btn.clicked.connect(self.start_compression)
         self.compare_btn.clicked.connect(self.show_comparison)
-        self.format_combo.currentTextChanged.connect(
-            self.update_format_specific_settings
-        )
+        self.format_combo.currentTextChanged.connect(self.update_format_specific_settings)
 
     def select_input_directory(self):
         """Select input directory for compression."""
@@ -606,7 +569,7 @@ class MainWindow(QMainWindow):
             self.compress_btn.setEnabled(True)
             self.log_message(f"Selected input directory: {self.input_directory}")
 
-    def get_compression_parameters(self) -> Dict[str, Any]:
+    def get_compression_parameters(self) -> dict[str, Any]:
         """Get all compression parameters from UI."""
         format_name = self.format_combo.currentText().lower()
 
@@ -658,24 +621,21 @@ class MainWindow(QMainWindow):
 
         return params
 
-    def _get_jpeg_subsampling_value(self) -> Union[int, str]:
+    def _get_jpeg_subsampling_value(self) -> int | str:
         """Convert JPEG subsampling combo text to actual value."""
         text = self.jpeg_subsampling.currentText()
         if "4:4:4" in text:
             return 0
-        elif "4:2:2" in text:
+        if "4:2:2" in text:
             return 1
-        elif "4:2:0" in text:
+        if "4:2:0" in text:
             return 2
-        else:
-            return -1  # Auto
+        return -1  # Auto
 
     def start_compression(self):
         """Start the compression process."""
         if not hasattr(self, "input_directory"):
-            QMessageBox.warning(
-                self, "Warning", "Please select an input directory first."
-            )
+            QMessageBox.warning(self, "Warning", "Please select an input directory first.")
             return
 
         # Create output directory
@@ -808,9 +768,7 @@ Output directory: {self.output_directory}
         try:
             # Create image pairs
             comparison_pairs = []
-            image_pairs = create_image_pairs(
-                self.output_directory, self.input_directory
-            )
+            image_pairs = create_image_pairs(self.output_directory, self.input_directory)
 
             for img1_path, img2_path in image_pairs:
                 # Determine pair name based on whether it's a real comparison
@@ -821,24 +779,16 @@ Output directory: {self.output_directory}
                     # Fallback: same file comparison
                     pair_name = f"{img1_path.name} (Same file)"
 
-                comparison_pairs.append(
-                    ImagePair(str(img1_path), str(img2_path), pair_name)
-                )
+                comparison_pairs.append(ImagePair(str(img1_path), str(img2_path), pair_name))
 
             # Show comparison window with settings file
             settings_file = self.output_directory / "compression_settings.json"
-            self.comparison_window = show_comparison_window(
-                comparison_pairs, settings_file
-            )
-            self.log_message(
-                f"Opened comparison window with {len(comparison_pairs)} image pairs"
-            )
+            self.comparison_window = show_comparison_window(comparison_pairs, settings_file)
+            self.log_message(f"Opened comparison window with {len(comparison_pairs)} image pairs")
 
         except Exception as e:
             self.log_message(f"Error opening comparison: {e}")
-            QMessageBox.critical(
-                self, "Error", f"Failed to open comparison window:\n\n{str(e)}"
-            )
+            QMessageBox.critical(self, "Error", f"Failed to open comparison window:\n\n{e!s}")
 
     def log_message(self, message: str):
         """Add a message to the log."""

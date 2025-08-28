@@ -5,92 +5,22 @@ A PyQt6 application for comparing pairs of images with interactive features.
 """
 
 import sys
-import os
-from typing import Optional, Tuple, List
+
+from PyQt6.QtCore import QPoint, QRect, QSize, Qt, pyqtSignal
+from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QPen, QPixmap, QWheelEvent
 from PyQt6.QtWidgets import (
     QApplication,
-    QMainWindow,
-    QWidget,
-    QVBoxLayout,
-    QHBoxLayout,
-    QScrollArea,
-    QLabel,
-    QPushButton,
     QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtCore import Qt, QPoint, QRect, QSize, pyqtSignal
-from PyQt6.QtGui import QPixmap, QPainter, QPen, QColor, QWheelEvent, QMouseEvent
 
-
-class ImagePair:
-    """Represents a pair of images for comparison."""
-
-    def __init__(self, image1_path: str, image2_path: str, name: str = ""):
-        self.image1_path = image1_path
-        self.image2_path = image2_path
-        self.name = (
-            name
-            or f"{os.path.basename(image1_path)} vs {os.path.basename(image2_path)}"
-        )
-        self._pixmap1: Optional[QPixmap] = None
-        self._pixmap2: Optional[QPixmap] = None
-
-    def get_pixmap1(self) -> QPixmap:
-        """Get the first image pixmap, loading it if necessary."""
-        if self._pixmap1 is None:
-            self._pixmap1 = QPixmap(self.image1_path)
-        return self._pixmap1
-
-    def get_pixmap2(self) -> QPixmap:
-        """Get the second image pixmap, loading it if necessary."""
-        if self._pixmap2 is None:
-            self._pixmap2 = QPixmap(self.image2_path)
-        return self._pixmap2
-
-    def create_thumbnail(self, size: QSize = QSize(100, 100)) -> QPixmap:
-        """Create a thumbnail showing both images side by side."""
-        pixmap1 = self.get_pixmap1()
-        pixmap2 = self.get_pixmap2()
-
-        # Create a combined thumbnail
-        combined = QPixmap(size)
-        combined.fill(Qt.GlobalColor.white)
-
-        painter = QPainter(combined)
-
-        # Calculate thumbnail dimensions
-        thumb_width = size.width() // 2
-        thumb_height = size.height()
-
-        # Draw first image (left side)
-        scaled1 = pixmap1.scaled(
-            thumb_width,
-            thumb_height,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        x1 = (thumb_width - scaled1.width()) // 2
-        y1 = (thumb_height - scaled1.height()) // 2
-        painter.drawPixmap(x1, y1, scaled1)
-
-        # Draw second image (right side)
-        scaled2 = pixmap2.scaled(
-            thumb_width,
-            thumb_height,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        x2 = thumb_width + (thumb_width - scaled2.width()) // 2
-        y2 = (thumb_height - scaled2.height()) // 2
-        painter.drawPixmap(x2, y2, scaled2)
-
-        # Draw divider line
-        pen = QPen(QColor(100, 100, 100), 2)
-        painter.setPen(pen)
-        painter.drawLine(thumb_width, 0, thumb_width, thumb_height)
-
-        painter.end()
-        return combined
+from service.image_pair import ImagePair
 
 
 class ComparisonViewer(QWidget):
@@ -102,7 +32,7 @@ class ComparisonViewer(QWidget):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         # Image data
-        self.image_pair: Optional[ImagePair] = None
+        self.image_pair: ImagePair | None = None
         self.zoom_factor = 1.0
         self.pan_offset = QPoint(0, 0)
         self.slider_position = 0.5  # 0.0 = left, 1.0 = right
@@ -145,7 +75,7 @@ class ComparisonViewer(QWidget):
         """Get the rectangle where images should be displayed."""
         return self.rect().adjusted(10, 10, -10, -10)
 
-    def get_scaled_pixmaps(self) -> Tuple[QPixmap, QPixmap]:
+    def get_scaled_pixmaps(self) -> tuple[QPixmap, QPixmap]:
         """Get the scaled pixmaps for both images."""
         if not self.image_pair:
             return QPixmap(), QPixmap()
@@ -203,7 +133,7 @@ class ComparisonViewer(QWidget):
 
         return scaled1, scaled2
 
-    def paintEvent(self, event):
+    def paintEvent(self, event):  # noqa: ARG002
         """Custom paint event for drawing the comparison view."""
         if not self.image_pair:
             # Draw placeholder
@@ -225,12 +155,7 @@ class ComparisonViewer(QWidget):
             return
 
         # Additional safety checks
-        if (
-            pixmap1.width() <= 0
-            or pixmap1.height() <= 0
-            or pixmap2.width() <= 0
-            or pixmap2.height() <= 0
-        ):
+        if pixmap1.width() <= 0 or pixmap1.height() <= 0 or pixmap2.width() <= 0 or pixmap2.height() <= 0:
             return
 
         # Calculate display positions
@@ -250,16 +175,12 @@ class ComparisonViewer(QWidget):
         # Draw first image (left part)
         if split_x > img1_x:
             left_rect = QRect(img1_x, img1_y, split_x - img1_x, pixmap1.height())
-            painter.drawPixmap(
-                left_rect, pixmap1, QRect(0, 0, split_x - img1_x, pixmap1.height())
-            )
+            painter.drawPixmap(left_rect, pixmap1, QRect(0, 0, split_x - img1_x, pixmap1.height()))
 
         # Draw second image (right part)
         if split_x < img2_x + pixmap2.width():
-            right_rect = QRect(
-                split_x, img2_y, img2_x + pixmap2.width() - split_x, pixmap2.height()
-            )
-            right_source_x = int((split_x - img2_x))
+            right_rect = QRect(split_x, img2_y, img2_x + pixmap2.width() - split_x, pixmap2.height())
+            right_source_x = int(split_x - img2_x)
             if right_source_x >= 0 and right_source_x < pixmap2.width():
                 source_width = pixmap2.width() - right_source_x
                 if source_width > 0:
@@ -405,7 +326,7 @@ class ThumbnailWidget(QWidget):
             }
         """)
 
-    def paintEvent(self, event):
+    def paintEvent(self, event):  # noqa: ARG002
         """Draw the thumbnail."""
         painter = QPainter(self)
 
@@ -424,9 +345,7 @@ class ThumbnailWidget(QWidget):
         painter.drawText(
             text_rect,
             Qt.AlignmentFlag.AlignCenter,
-            self.image_pair.name[:15] + "..."
-            if len(self.image_pair.name) > 15
-            else self.image_pair.name,
+            self.image_pair.name[:15] + "..." if len(self.image_pair.name) > 15 else self.image_pair.name,
         )
 
     def mousePressEvent(self, event: QMouseEvent):
@@ -494,7 +413,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.image_pairs: List[ImagePair] = []
+        self.image_pairs: list[ImagePair] = []
         self.current_pair_index = -1
 
         self.setup_ui()
@@ -633,15 +552,10 @@ class MainWindow(QMainWindow):
     def update_status(self):
         """Update the status label."""
         if self.image_pairs:
-            current_pair = (
-                self.image_pairs[self.current_pair_index]
-                if self.current_pair_index >= 0
-                else None
-            )
+            current_pair = self.image_pairs[self.current_pair_index] if self.current_pair_index >= 0 else None
             if current_pair:
                 self.status_label.setText(
-                    f"Showing: {current_pair.name} "
-                    f"({self.current_pair_index + 1}/{len(self.image_pairs)})"
+                    f"Showing: {current_pair.name} ({self.current_pair_index + 1}/{len(self.image_pairs)})"
                 )
             else:
                 self.status_label.setText(f"Loaded {len(self.image_pairs)} image pairs")
