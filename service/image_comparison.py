@@ -7,7 +7,7 @@ Provides functionality for comparing pairs of images with interactive features.
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QPoint, QRect, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QMouseEvent,
@@ -405,6 +405,11 @@ class ThumbnailWidget(QWidget):
         self.setFixedSize(120, 120)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.thumbnail_size = QSize(100, 100)
+        self._thumbnail: QPixmap | None = None
+        self._is_loading = False
+        self._spinner_angle = 0
+        self._spinner_timer = QTimer(self)
+        self._spinner_timer.timeout.connect(self._advance_spinner)
 
         self.setStyleSheet("""
             QWidget {
@@ -419,18 +424,44 @@ class ThumbnailWidget(QWidget):
             }
         """)
 
+    def _advance_spinner(self) -> None:
+        self._spinner_angle = (self._spinner_angle + 30) % 360
+        self.update()
+
+    def _load_thumbnail(self) -> None:
+        self._thumbnail = self.image_pair.create_thumbnail(self.thumbnail_size)
+        self._is_loading = False
+        self._spinner_timer.stop()
+        self.update()
+
     def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: ARG002
-        """Draw the thumbnail."""
+        """Draw the thumbnail or a loading spinner."""
         painter = QPainter(self)
 
-        # Draw thumbnail centered with space for the label
-        thumbnail = self.image_pair.create_thumbnail(self.thumbnail_size)
-
-        label_height = 20
-        available_height = self.height() - label_height
-        x = (self.width() - thumbnail.width()) // 2
-        y = (available_height - thumbnail.height()) // 2
-        painter.drawPixmap(x, y, thumbnail)
+        if self._thumbnail is None:
+            if not self._is_loading:
+                self._is_loading = True
+                self._spinner_timer.start(100)
+                QTimer.singleShot(10, self._load_thumbnail)
+            radius = 15
+            center = self.rect().center()
+            pen = QPen(QColor(200, 200, 200))
+            pen.setWidth(3)
+            painter.setPen(pen)
+            painter.drawArc(
+                center.x() - radius,
+                center.y() - radius,
+                radius * 2,
+                radius * 2,
+                self._spinner_angle * 16,
+                120 * 16,
+            )
+        else:
+            label_height = 20
+            available_height = self.height() - label_height
+            x = (self.width() - self._thumbnail.width()) // 2
+            y = (available_height - self._thumbnail.height()) // 2
+            painter.drawPixmap(x, y, self._thumbnail)
 
         # Draw name below the thumbnail
         painter.setPen(QPen(QColor(255, 255, 255)))
