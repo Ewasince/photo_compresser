@@ -6,6 +6,7 @@ A PyQt6 application for comparing pairs of images with interactive features.
 
 import json
 import sys
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,7 @@ from PyQt6.QtWidgets import (
 )
 
 from service.constants import SUPPORTED_EXTENSIONS
+from service.file_utils import format_timedelta
 from service.image_pair import ImagePair
 
 
@@ -435,12 +437,101 @@ class CompressionStatsDialog(QDialog):
         layout.addWidget(QLabel("Metric"), 0, 0)
         layout.addWidget(QLabel("Directory 1"), 0, 1)
         layout.addWidget(QLabel("Directory 2"), 0, 2)
+        layout.addWidget(QLabel("Difference"), 0, 3)
+
+        label_map = {
+            "input_size_mb": "Input Size",
+            "output_size_mb": "Output Size",
+            "space_saved_mb": "Space Saved",
+            "compression_ratio_percent": "Compression Ratio",
+            "total_files": "Total Files",
+            "compressed_files": "Files Compressed",
+            "failed_files_count": "Failed Files",
+            "conversion_time": "Conversion Time",
+        }
+
+        higher_better = {
+            "space_saved_mb",
+            "compression_ratio_percent",
+            "total_files",
+            "compressed_files",
+        }
+
+        def parse_time(value: str) -> float | None:
+            total = 0
+            for part in value.split():
+                try:
+                    num = int(part[:-1])
+                except ValueError:
+                    return None
+                unit = part[-1]
+                if unit == "d":
+                    total += num * 86400
+                elif unit == "h":
+                    total += num * 3600
+                elif unit == "m":
+                    total += num * 60
+                elif unit == "s":
+                    total += num
+                else:
+                    return None
+            return float(total)
+
+        def format_value(key: str, value: Any) -> str:
+            if isinstance(value, int | float):
+                if key.endswith("_mb"):
+                    return f"{value:.2f} MB"
+                if key == "compression_ratio_percent":
+                    return f"{value:.2f} %"
+                return f"{value}"
+            return str(value)
 
         keys = sorted(set(stats1.keys()) | set(stats2.keys()))
         for row, key in enumerate(keys, start=1):
-            layout.addWidget(QLabel(key), row, 0)
-            layout.addWidget(QLabel(str(stats1.get(key, ""))), row, 1)
-            layout.addWidget(QLabel(str(stats2.get(key, ""))), row, 2)
+            layout.addWidget(QLabel(label_map.get(key, key)), row, 0)
+            val1 = stats1.get(key, "")
+            val2 = stats2.get(key, "")
+            label1 = QLabel(format_value(key, val1))
+            label2 = QLabel(format_value(key, val2))
+
+            diff_text = ""
+            v1: float | None = None
+            v2: float | None = None
+
+            if isinstance(val1, int | float) and isinstance(val2, int | float):
+                v1 = float(val1)
+                v2 = float(val2)
+                diff = v1 - v2
+                if key.endswith("_mb"):
+                    diff_text = f"{diff:.2f} MB"
+                elif key == "compression_ratio_percent":
+                    diff_text = f"{diff:.2f} %"
+                else:
+                    diff_text = f"{diff}"
+            elif key == "conversion_time" and isinstance(val1, str) and isinstance(val2, str):
+                v1 = parse_time(val1)
+                v2 = parse_time(val2)
+                if v1 is not None and v2 is not None:
+                    diff_seconds = v1 - v2
+                    sign = "-" if diff_seconds < 0 else ""
+                    diff_text = f"{sign}{format_timedelta(timedelta(seconds=abs(diff_seconds)))}"
+
+            label_diff = QLabel(diff_text)
+
+            layout.addWidget(label1, row, 1)
+            layout.addWidget(label2, row, 2)
+            layout.addWidget(label_diff, row, 3)
+
+            if v1 is not None and v2 is not None:
+                if key in higher_better:
+                    if v1 > v2:
+                        label1.setStyleSheet("background-color: #228B22; color: white;")
+                    elif v2 > v1:
+                        label2.setStyleSheet("background-color: #228B22; color: white;")
+                elif v1 < v2:
+                    label1.setStyleSheet("background-color: #228B22; color: white;")
+                elif v2 < v1:
+                    label2.setStyleSheet("background-color: #228B22; color: white;")
 
 
 class MainWindow(QMainWindow):
