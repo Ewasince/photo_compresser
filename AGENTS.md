@@ -18,7 +18,7 @@
 
 ## Git instructions
 - Commit message format: `<type>[optional scope]: <description>`
-- Create branches in sub-branch `codex`, e.g. `codex/feature-name`
+- Create branches in sub-branch `codex` with sub-branch main, e.g. `codex/<feature-name>/main`
 
 ## PR instructions
 - Title format: `[photo_compresser] <Title>`
