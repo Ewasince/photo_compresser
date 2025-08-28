@@ -457,6 +457,11 @@ class ThumbnailWidget(QWidget):
         self.update()
 
     def _load_thumbnail(self) -> None:
+        if self.visibleRegion().isEmpty():
+            # Widget scrolled out of view; defer loading until visible again
+            self._is_loading = False
+            self._spinner_timer.stop()
+            return
         self._thumbnail = self.image_pair.create_thumbnail(self.thumbnail_size)
         self._is_loading = False
         self._spinner_timer.stop()
@@ -470,6 +475,11 @@ class ThumbnailWidget(QWidget):
         available_height = self.height() - label_height
 
         if self._thumbnail is None:
+            if self.visibleRegion().isEmpty():
+                if self._is_loading:
+                    self._spinner_timer.stop()
+                    self._is_loading = False
+                return
             if not self._is_loading:
                 self._is_loading = True
                 self._spinner_timer.start(100)
