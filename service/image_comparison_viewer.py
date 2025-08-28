@@ -4,7 +4,10 @@ Image Comparison Viewer
 A PyQt6 application for comparing pairs of images with interactive features.
 """
 
+import json
 import sys
+from pathlib import Path
+from typing import Any
 
 from PyQt6.QtCore import QPoint, QRect, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import (
@@ -18,7 +21,9 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -28,6 +33,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from service.constants import SUPPORTED_EXTENSIONS
 from service.image_pair import ImagePair
 
 
@@ -418,6 +424,25 @@ class ThumbnailCarousel(QScrollArea):
                     widget.deleteLater()
 
 
+class CompressionStatsDialog(QDialog):
+    """Dialog window to display compression statistics side by side."""
+
+    def __init__(self, stats1: dict[str, Any], stats2: dict[str, Any], parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Compression Statistics")
+        layout = QGridLayout(self)
+
+        layout.addWidget(QLabel("Metric"), 0, 0)
+        layout.addWidget(QLabel("Directory 1"), 0, 1)
+        layout.addWidget(QLabel("Directory 2"), 0, 2)
+
+        keys = sorted(set(stats1.keys()) | set(stats2.keys()))
+        for row, key in enumerate(keys, start=1):
+            layout.addWidget(QLabel(key), row, 0)
+            layout.addWidget(QLabel(str(stats1.get(key, ""))), row, 1)
+            layout.addWidget(QLabel(str(stats2.get(key, ""))), row, 2)
+
+
 class MainWindow(QMainWindow):
     """Main application window."""
 
@@ -425,6 +450,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.image_pairs: list[ImagePair] = []
         self.current_pair_index = -1
+        self.stats_data: tuple[dict[str, Any], dict[str, Any]] | None = None
 
         self.setup_ui()
         self.setup_connections()
@@ -452,6 +478,24 @@ class MainWindow(QMainWindow):
         # Top controls
         controls_layout = QHBoxLayout()
 
+        self.load_config_button = QPushButton("Load Config")
+        self.load_config_button.setStyleSheet("""
+            QPushButton {
+                background-color: #005a9e;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #106ebe;
+            }
+            QPushButton:pressed {
+                background-color: #004578;
+            }
+        """)
+
         self.load_button = QPushButton("Load Image Pair")
         self.load_button.setStyleSheet("""
             QPushButton {
@@ -467,6 +511,24 @@ class MainWindow(QMainWindow):
             }
             QPushButton:pressed {
                 background-color: #005a9e;
+            }
+        """)
+
+        self.load_dirs_button = QPushButton("Load Directories")
+        self.load_dirs_button.setStyleSheet("""
+            QPushButton {
+                background-color: #008272;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #108775;
+            }
+            QPushButton:pressed {
+                background-color: #006f5f;
             }
         """)
 
@@ -488,8 +550,30 @@ class MainWindow(QMainWindow):
             }
         """)
 
+        self.stats_button = QPushButton("Compare Stats")
+        self.stats_button.setEnabled(False)
+        self.stats_button.setStyleSheet("""
+            QPushButton {
+                background-color: #444;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #555;
+            }
+            QPushButton:pressed {
+                background-color: #333;
+            }
+        """)
+
+        controls_layout.addWidget(self.load_config_button)
         controls_layout.addWidget(self.load_button)
+        controls_layout.addWidget(self.load_dirs_button)
         controls_layout.addWidget(self.reset_button)
+        controls_layout.addWidget(self.stats_button)
         controls_layout.addStretch()
 
         # Status label
@@ -509,8 +593,11 @@ class MainWindow(QMainWindow):
 
     def setup_connections(self) -> None:
         """Set up signal connections."""
+        self.load_config_button.clicked.connect(self.load_config)
         self.load_button.clicked.connect(self.load_image_pair)
+        self.load_dirs_button.clicked.connect(self.load_directories)
         self.reset_button.clicked.connect(self.reset_view)
+        self.stats_button.clicked.connect(self.show_stats)
         self.carousel.thumbnail_clicked.connect(self.load_image_pair_from_thumbnail)
 
     def load_image_pair(self) -> None:
@@ -549,6 +636,103 @@ class MainWindow(QMainWindow):
 
         self.update_status()
 
+    def clear_pairs(self) -> None:
+        """Clear loaded image pairs and thumbnails."""
+        self.image_pairs.clear()
+        self.carousel.clear()
+        self.current_pair_index = -1
+        self.viewer.image_pair = None
+        self.viewer.update()
+        self.stats_data = None
+        self.stats_button.setEnabled(False)
+        self.update_status()
+
+    def load_config(self) -> None:
+        """Load image pairs from a compression settings file."""
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Config", "", "JSON Files (*.json)")
+        if not file_path:
+            return
+        self.load_config_from_path(Path(file_path))
+
+    def load_config_from_path(self, path: Path) -> None:
+        try:
+            with path.open() as f:
+                data = json.load(f)
+        except Exception:
+            return
+        self.clear_pairs()
+        for pair in data.get("image_pairs", []):
+            orig = pair.get("original")
+            comp = pair.get("compressed")
+            if orig and comp:
+                name = pair.get("original_name", Path(orig).name)
+                image_pair = ImagePair(orig, comp, name)
+                self.image_pairs.append(image_pair)
+                self.carousel.add_image_pair(image_pair)
+        if self.image_pairs:
+            self.load_image_pair_from_thumbnail(self.image_pairs[0])
+        self.update_status()
+
+    def load_directories(self) -> None:
+        """Load image pairs from two directories."""
+        dir1 = QFileDialog.getExistingDirectory(self, "Select First Directory")
+        if not dir1:
+            return
+        dir2 = QFileDialog.getExistingDirectory(self, "Select Second Directory")
+        if not dir2:
+            return
+        self.load_directories_from_paths(Path(dir1), Path(dir2))
+
+    def load_directories_from_paths(self, dir1: Path, dir2: Path) -> None:
+        self.clear_pairs()
+        stats1_file = dir1 / "compression_settings.json"
+        stats2_file = dir2 / "compression_settings.json"
+        stats1: Path | None = stats1_file if stats1_file.exists() else None
+        stats2: Path | None = stats2_file if stats2_file.exists() else None
+
+        for file1 in dir1.rglob("*"):
+            if not file1.is_file() or file1.suffix.lower() not in SUPPORTED_EXTENSIONS:
+                continue
+            rel = file1.relative_to(dir1)
+            file2 = dir2 / rel
+            if not file2.exists():
+                for ext in SUPPORTED_EXTENSIONS:
+                    candidate = file2.with_suffix(ext)
+                    if candidate.exists():
+                        file2 = candidate
+                        break
+            if file2.exists():
+                pair_name = rel.as_posix()
+                image_pair = ImagePair(str(file1), str(file2), pair_name)
+                self.image_pairs.append(image_pair)
+                self.carousel.add_image_pair(image_pair)
+
+        if self.image_pairs:
+            self.load_image_pair_from_thumbnail(self.image_pairs[0])
+
+        if stats1 and stats2:
+            try:
+                with stats1.open() as f1, stats2.open() as f2:
+                    data1 = json.load(f1)
+                    data2 = json.load(f2)
+                self.stats_data = (data1.get("stats", {}), data2.get("stats", {}))
+                self.stats_button.setEnabled(True)
+            except Exception:
+                self.stats_data = None
+                self.stats_button.setEnabled(False)
+        else:
+            self.stats_data = None
+            self.stats_button.setEnabled(False)
+
+        self.update_status()
+
+    def show_stats(self) -> None:
+        """Show compression statistics comparison dialog."""
+        if not self.stats_data:
+            return
+        dialog = CompressionStatsDialog(self.stats_data[0], self.stats_data[1], self)
+        dialog.exec()
+
     def load_image_pair_from_thumbnail(self, image_pair: ImagePair) -> None:
         """Load an image pair from a thumbnail click."""
         self.viewer.set_image_pair(image_pair)
@@ -575,6 +759,14 @@ class MainWindow(QMainWindow):
 
 def main() -> None:
     """Main application entry point."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Image Comparison Viewer")
+    parser.add_argument("--config", type=str, help="Path to preview config file")
+    parser.add_argument("--dir1", type=str, help="First directory for comparison")
+    parser.add_argument("--dir2", type=str, help="Second directory for comparison")
+    args = parser.parse_args()
+
     app = QApplication(sys.argv)
 
     # Set application properties
@@ -584,6 +776,11 @@ def main() -> None:
     # Create and show main window
     window = MainWindow()
     window.show()
+
+    if args.config:
+        window.load_config_from_path(Path(args.config))
+    elif args.dir1 and args.dir2:
+        window.load_directories_from_paths(Path(args.dir1), Path(args.dir2))
 
     # Run the application
     sys.exit(app.exec())
