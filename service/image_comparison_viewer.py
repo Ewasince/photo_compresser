@@ -577,6 +577,9 @@ class ThumbnailCarousel(QScrollArea):
         self._load_timer.setInterval(50)
         self._load_timer.timeout.connect(self.load_visible_thumbnails)
 
+        # Track the index range of thumbnails currently visible
+        self._visible_range: tuple[int, int] = (0, -1)
+
         scroll_bar = self.horizontalScrollBar()
         if scroll_bar is not None:
             scroll_bar.valueChanged.connect(self._schedule_load_visible_thumbnails)
@@ -609,22 +612,51 @@ class ThumbnailCarousel(QScrollArea):
     def load_visible_thumbnails(self) -> None:
         """Start loading thumbnails that are visible in the viewport."""
         viewport_widget = self.viewport()
-        if viewport_widget is None:
+        scroll_bar = self.horizontalScrollBar()
+        count = self.container_layout.count()
+        if viewport_widget is None or scroll_bar is None or count == 0:
             return
-        viewport_rect = viewport_widget.rect()
-        for i in range(self.container_layout.count()):
-            item = self.container_layout.itemAt(i)
-            if item is None:
-                continue
-            widget = item.widget()
-            if not isinstance(widget, ThumbnailWidget):
-                continue
-            top_left = widget.mapTo(viewport_widget, QPoint(0, 0))
-            widget_rect = QRect(top_left, widget.size())
-            if widget_rect.intersects(viewport_rect):
-                widget.start_loading()
-            else:
-                widget.cancel_loading()
+
+        # Determine the visible index range based on scroll position
+        margins = self.container_layout.contentsMargins()
+        spacing = self.container_layout.spacing()
+        first_item = self.container_layout.itemAt(0)
+        first_widget = first_item.widget() if first_item is not None else None
+        item_width = first_widget.width() if first_widget is not None else 0
+
+        per_item = item_width + spacing
+        if per_item <= 0:
+            return
+
+        scroll_x = scroll_bar.value()
+        viewport_width = viewport_widget.width()
+
+        start = max(0, (scroll_x - margins.left()) // per_item)
+        end = min(count - 1, (scroll_x + viewport_width - margins.left()) // per_item)
+
+        prev_start, prev_end = self._visible_range
+        if start == prev_start and end == prev_end:
+            return
+
+        # Cancel thumbnails that scrolled out of view
+        for i in range(prev_start, prev_end + 1):
+            if i < start or i > end:
+                item = self.container_layout.itemAt(i)
+                if item is not None:
+                    widget = item.widget()
+                    if isinstance(widget, ThumbnailWidget):
+                        widget.cancel_loading()
+
+        # Start loading newly visible thumbnails
+        for i in range(start, end + 1):
+            if i < prev_start or i > prev_end:
+                item = self.container_layout.itemAt(i)
+                if item is not None:
+                    widget = item.widget()
+                    if isinstance(widget, ThumbnailWidget):
+                        widget.start_loading()
+
+        self._visible_range = (start, end)
 
     def _schedule_load_visible_thumbnails(self) -> None:
         """Debounce thumbnail loading during rapid scrolling."""
