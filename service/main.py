@@ -265,21 +265,31 @@ class MainWindow(QMainWindow):
         self.basic_layout.addWidget(self.quality_spinbox, 0, 1)
 
         # Max largest side
-        self.basic_layout.addWidget(QLabel("Max Largest Side:"), 1, 0)
+        self.max_largest_checkbox = QCheckBox("Max Largest Side:")
+        self.max_largest_checkbox.setChecked(True)
+        self.max_largest_checkbox.setToolTip("Enable maximum size limit for the largest side")
+        self.basic_layout.addWidget(self.max_largest_checkbox, 1, 0)
         self.max_largest_spinbox = QSpinBox()
         self.max_largest_spinbox.setRange(100, 10000)
         self.max_largest_spinbox.setValue(1920)
         self.max_largest_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
         self.max_largest_spinbox.setToolTip("Maximum size of the largest side in pixels")
+        self.max_largest_checkbox.toggled.connect(self.max_largest_spinbox.setEnabled)
+        self.max_largest_spinbox.setEnabled(self.max_largest_checkbox.isChecked())
         self.basic_layout.addWidget(self.max_largest_spinbox, 1, 1)
 
         # Max smallest side
-        self.basic_layout.addWidget(QLabel("Max Smallest Side:"), 2, 0)
+        self.max_smallest_checkbox = QCheckBox("Max Smallest Side:")
+        self.max_smallest_checkbox.setChecked(True)
+        self.max_smallest_checkbox.setToolTip("Enable maximum size limit for the smallest side")
+        self.basic_layout.addWidget(self.max_smallest_checkbox, 2, 0)
         self.max_smallest_spinbox = QSpinBox()
         self.max_smallest_spinbox.setRange(100, 10000)
         self.max_smallest_spinbox.setValue(1080)
         self.max_smallest_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
         self.max_smallest_spinbox.setToolTip("Maximum size of the smallest side in pixels")
+        self.max_smallest_checkbox.toggled.connect(self.max_smallest_spinbox.setEnabled)
+        self.max_smallest_spinbox.setEnabled(self.max_smallest_checkbox.isChecked())
         self.basic_layout.addWidget(self.max_smallest_spinbox, 2, 1)
 
         # Output format
@@ -636,8 +646,8 @@ class MainWindow(QMainWindow):
         # Basic parameters
         params = {
             "quality": self.quality_spinbox.value(),
-            "max_largest_side": self.max_largest_spinbox.value(),
-            "max_smallest_side": self.max_smallest_spinbox.value(),
+            "max_largest_side": self.max_largest_spinbox.value() if self.max_largest_checkbox.isChecked() else None,
+            "max_smallest_side": self.max_smallest_spinbox.value() if self.max_smallest_checkbox.isChecked() else None,
             "preserve_structure": self.preserve_structure_checkbox.isChecked(),
             "output_format": self.format_combo.currentText(),
             "input_directory": str(self.input_directory),
