@@ -18,6 +18,7 @@ dev = [
     "ruff>=0.12.10",
     "pyqt6-stubs>=6.6.0",
     "pyinstaller>=6.15.0",
+    "nuitka>=2.7.13",
 ]
 
 [tool.mypy]
