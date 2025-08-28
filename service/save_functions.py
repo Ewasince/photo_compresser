@@ -1,12 +1,15 @@
 import os  # ← для os.utime
 from pathlib import Path
+from typing import Any
 
 import pillow_avif  # noqa: F401
 from PIL import Image
 
 
 # ВСПОМОГАТЕЛЬНОЕ: аккуратно убирать альфу для JPEG
-def _flatten_for_jpeg(im: Image.Image, background=(255, 255, 255)) -> Image.Image:
+def _flatten_for_jpeg(
+    im: Image.Image, background: tuple[int, int, int] = (255, 255, 255)
+) -> Image.Image:
     """
     JPEG не поддерживает альфа-канал. Эта функция безопасно «сплющит» RGBA к RGB.
     """
@@ -24,7 +27,7 @@ def _copy_times_from_src(src: Path, dst: Path) -> None:
 
 # JPEG
 def save_jpeg(
-    im: Image,
+    im: Image.Image,
     src: Path,
     dst: Path,
     *,
@@ -36,7 +39,7 @@ def save_jpeg(
     qtables: dict | None = None,  # [ПРО] Кастомные квант-таблицы (обычно не трогаем)
     smooth: int = 0,  # [ПРО] 0–100. Лёгкое сглаживание (меньше шум → лучше сжимается)
     keep_rgb: bool = False,  # [ПРО] Сохранить в RGB (без YCbCr). Может ↑размер, но убирает переход
-):
+) -> None:
     """
     Сохраняет как JPEG, прокидывая только параметры, влияющие на качество/сжатие.
     Дефолты соответствуют поведению Pillow, если параметры не указать.
@@ -52,7 +55,7 @@ def save_jpeg(
     xmp = im.info.get("xmp")
 
     # Собираем kwargs только из «влияющих» параметров
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "quality": quality,  # 0–100 (дефолт 75)
         "subsampling": subsampling,  # -1, 0/1/2 или "4:4:4" и т.п.
         "progressive": progressive,  # False по умолчанию
@@ -78,7 +81,7 @@ def save_jpeg(
 
 # WebP
 def save_webp(
-    im: Image,
+    im: Image.Image,
     src: str | Path,
     dst: str | Path,
     *,
@@ -87,7 +90,7 @@ def save_webp(
     method: int = 4,  # [ПРО] 0–6. Медленнее → лучше сжатие при том же качестве (дефолт 4)
     alpha_quality: int = 100,  # [ПРО] 0–100. Качество альфы в lossy; дефолт 100
     exact: bool = False,  # [ПРО] False/True. Сохранять RGB под прозрачностью (↑размер, ↑качество)
-):
+) -> None:
     """
     Сохраняет как WebP. Прокидывает только влияющие на качество/сжатие параметры.
     Дефолты соответствуют Pillow (lossy q=80/method=4; метаданные не пишутся).
@@ -102,7 +105,7 @@ def save_webp(
     icc_profile = im.info.get("icc_profile")
     xmp = im.info.get("xmp")
 
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "lossless": lossless,  # False
         "quality": quality,  # 0–100 (80)
         "method": method,  # 0–6 (4)
@@ -118,16 +121,19 @@ def save_webp(
     if xmp:
         kwargs["xmp"] = xmp
 
-    im.save(dst, format="WEBP", **kwargs)
+    src_path = Path(src)
+    dst_path = Path(dst)
+
+    im.save(dst_path, format="WEBP", **kwargs)
 
     # Копируем временные метки из исходного файла
-    _copy_times_from_src(src, dst)
+    _copy_times_from_src(src_path, dst_path)
 
 
 # ────────────────────────────────────────────────────────────────────────────────
 # AVIF (через pillow-avif-plugin; в официальном Pillow — аналогично по ключам)
 def save_avif(
-    im: Image,
+    im: Image.Image,
     src: str | Path,
     dst: str | Path,
     *,
@@ -141,7 +147,7 @@ def save_avif(
     autotiling: bool = True,  # [ПРО] True (деф.) | False. Автотайлинг для декод-скорости
     tile_rows_log2: int = 0,  # [ПРО] 0..6 (лог2). Явные тайлы по строкам (если autotiling=False)
     tile_cols_log2: int = 0,  # [ПРО] 0..6 (лог2). Явные тайлы по столбцам (если autotiling=False)
-):
+) -> None:
     """
     Сохраняет как AVIF. Прокидывает только влияющие параметры (качество, сабсэмплинг,
     скорость/кодек, кванты, тайлинг). Дефолты соответствуют текущему поведению плагина.
@@ -154,7 +160,7 @@ def save_avif(
     icc_profile = im.info.get("icc_profile")
     xmp = im.info.get("xmp")
 
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "quality": quality,  # 0–100 (75)
         "subsampling": subsampling,  # "4:2:0" (деф.), "4:2:2", "4:4:4", "4:0:0"
         "speed": speed,  # 0–10 (6)
@@ -179,7 +185,10 @@ def save_avif(
     if xmp:
         kwargs["xmp"] = xmp
 
-    im.save(dst, format="AVIF", **kwargs)
+    src_path = Path(src)
+    dst_path = Path(dst)
+
+    im.save(dst_path, format="AVIF", **kwargs)
 
     # Копируем временные метки из исходного файла
-    _copy_times_from_src(src, dst)
+    _copy_times_from_src(src_path, dst_path)

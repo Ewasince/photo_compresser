@@ -11,6 +11,7 @@ from PyQt6.QtCore import QPoint, QRect, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QMouseEvent,
+    QPaintEvent,
     QPainter,
     QPen,
     QPixmap,
@@ -39,7 +40,7 @@ FORMATS_PATTERN = f"Images ({FORMATS_PATTERNS})"
 class ComparisonViewer(QWidget):
     """Main widget for displaying and comparing images."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -68,13 +69,13 @@ class ComparisonViewer(QWidget):
             }
         """)
 
-    def set_image_pair(self, image_pair: ImagePair):
+    def set_image_pair(self, image_pair: ImagePair) -> None:
         """Set the image pair to display."""
         self.image_pair = image_pair
         self.reset_view()
         self.update()
 
-    def reset_view(self):
+    def reset_view(self) -> None:
         """Reset zoom and pan to fit images."""
         if not self.image_pair:
             return
@@ -156,7 +157,7 @@ class ComparisonViewer(QWidget):
 
         return scaled1, scaled2
 
-    def paintEvent(self, event):  # noqa: ARG002
+    def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: ARG002
         """Custom paint event for drawing the comparison view."""
         if not self.image_pair:
             # Draw placeholder
@@ -239,9 +240,9 @@ class ComparisonViewer(QWidget):
             pixmap2.height(),
         )
 
-    def mousePressEvent(self, event: QMouseEvent):
+    def mousePressEvent(self, event: QMouseEvent | None) -> None:
         """Handle mouse press events."""
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event is not None and event.button() == Qt.MouseButton.LeftButton:
             # Check if clicking on slider
             if self.is_near_slider(event.pos()):
                 self.is_dragging_slider = True
@@ -250,16 +251,16 @@ class ComparisonViewer(QWidget):
             self.last_mouse_pos = event.pos()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
-    def mouseReleaseEvent(self, event: QMouseEvent):
+    def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
         """Handle mouse release events."""
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event is not None and event.button() == Qt.MouseButton.LeftButton:
             self.is_panning = False
             self.is_dragging_slider = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
 
-    def mouseMoveEvent(self, event: QMouseEvent):
+    def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
         """Handle mouse move events."""
-        if not self.image_pair:
+        if not self.image_pair or event is None:
             return
 
         if self.is_dragging_slider:
@@ -289,9 +290,9 @@ class ComparisonViewer(QWidget):
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
 
-    def wheelEvent(self, event: QWheelEvent):
+    def wheelEvent(self, event: QWheelEvent | None) -> None:
         """Handle mouse wheel events for zooming and scrolling."""
-        if not self.image_pair:
+        if not self.image_pair or event is None:
             return
 
         modifiers = event.modifiers()
@@ -347,7 +348,7 @@ class ComparisonViewer(QWidget):
         scaled_height1: int,
         scaled_width2: int,
         scaled_height2: int,
-    ):
+    ) -> None:
         """Draw image resolutions at the bottom of each image."""
         if not self.image_pair:
             return
@@ -394,7 +395,7 @@ class ThumbnailWidget(QWidget):
 
     clicked = pyqtSignal(ImagePair)
 
-    def __init__(self, image_pair: ImagePair, parent=None):
+    def __init__(self, image_pair: ImagePair, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.image_pair = image_pair
         self.setFixedSize(120, 120)
@@ -416,7 +417,7 @@ class ThumbnailWidget(QWidget):
             }
         """)
 
-    def paintEvent(self, event):  # noqa: ARG002
+    def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: ARG002
         """Draw the thumbnail."""
         painter = QPainter(self)
 
@@ -438,9 +439,9 @@ class ThumbnailWidget(QWidget):
             self.image_pair.name[:15] + "..." if len(self.image_pair.name) > 15 else self.image_pair.name,
         )
 
-    def mousePressEvent(self, event: QMouseEvent):
+    def mousePressEvent(self, event: QMouseEvent | None) -> None:
         """Handle click events."""
-        if event.button() == Qt.MouseButton.LeftButton:
+        if event is not None and event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self.image_pair)
 
 
@@ -449,7 +450,7 @@ class ThumbnailCarousel(QScrollArea):
 
     thumbnail_clicked = pyqtSignal(ImagePair)
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -484,24 +485,30 @@ class ThumbnailCarousel(QScrollArea):
             }
         """)
 
-    def add_image_pair(self, image_pair: ImagePair):
+    def add_image_pair(self, image_pair: ImagePair) -> None:
         """Add an image pair thumbnail to the carousel."""
         thumbnail = ThumbnailWidget(image_pair)
         thumbnail.clicked.connect(self.thumbnail_clicked.emit)
         self.container_layout.addWidget(thumbnail)
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear all thumbnails."""
         while self.container_layout.count():
             child = self.container_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
+            if child is not None:
+                widget = child.widget()
+                if widget is not None:
+                    widget.deleteLater()
 
 
 class ComparisonWindow(QMainWindow):
     """Window for image comparison functionality."""
 
-    def __init__(self, image_pairs: list[ImagePair] | None = None, settings_file: Path | None = None):
+    def __init__(
+        self,
+        image_pairs: list[ImagePair] | None = None,
+        settings_file: Path | None = None,
+    ) -> None:
         super().__init__()
         self.image_pairs: list[ImagePair] = image_pairs or []
         self.current_pair_index = -1
@@ -519,7 +526,7 @@ class ComparisonWindow(QMainWindow):
             }
         """)
 
-    def setup_ui(self):
+    def setup_ui(self) -> None:
         """Set up the user interface."""
         # Central widget
         central_widget = QWidget()
@@ -611,14 +618,14 @@ class ComparisonWindow(QMainWindow):
         if self.image_pairs:
             self.load_image_pairs(self.image_pairs)
 
-    def setup_connections(self):
+    def setup_connections(self) -> None:
         """Set up signal connections."""
         self.load_button.clicked.connect(self.load_image_pair)
         self.reset_button.clicked.connect(self.reset_view)
         self.settings_button.clicked.connect(self.view_settings)
         self.carousel.thumbnail_clicked.connect(self.load_image_pair_from_thumbnail)
 
-    def load_image_pairs(self, image_pairs: list[ImagePair]):
+    def load_image_pairs(self, image_pairs: list[ImagePair]) -> None:
         """Load multiple image pairs."""
         self.image_pairs = image_pairs
         self.carousel.clear()
@@ -631,7 +638,7 @@ class ComparisonWindow(QMainWindow):
 
         self.update_status()
 
-    def load_image_pair(self):
+    def load_image_pair(self) -> None:
         """Load a pair of images."""
         # Load first image
         file1, _ = QFileDialog.getOpenFileName(
@@ -667,17 +674,17 @@ class ComparisonWindow(QMainWindow):
 
         self.update_status()
 
-    def load_image_pair_from_thumbnail(self, image_pair: ImagePair):
+    def load_image_pair_from_thumbnail(self, image_pair: ImagePair) -> None:
         """Load an image pair from a thumbnail click."""
         self.viewer.set_image_pair(image_pair)
         self.current_pair_index = self.image_pairs.index(image_pair)
         self.update_status()
 
-    def reset_view(self):
+    def reset_view(self) -> None:
         """Reset the viewer to fit images."""
         self.viewer.reset_view()
 
-    def update_status(self):
+    def update_status(self) -> None:
         """Update the status label."""
         if self.image_pairs:
             current_pair = self.image_pairs[self.current_pair_index] if self.current_pair_index >= 0 else None
@@ -690,7 +697,7 @@ class ComparisonWindow(QMainWindow):
         else:
             self.status_label.setText("No images loaded")
 
-    def view_settings(self):
+    def view_settings(self) -> None:
         """View compression settings."""
         if not self.settings_file or not self.settings_file.exists():
             QMessageBox.information(self, "No Settings", "No compression settings file found.")
@@ -729,7 +736,10 @@ Total Image Pairs: {settings_data.get("total_pairs", "N/A")}
             QMessageBox.critical(self, "Error", f"Failed to view settings:\n\n{e!s}")
 
 
-def show_comparison_window(image_pairs: list[ImagePair] | None = None, settings_file: Path | None = None):
+def show_comparison_window(
+    image_pairs: list[ImagePair] | None = None,
+    settings_file: Path | None = None,
+) -> "ComparisonWindow":
     """Show the comparison window with optional image pairs."""
     app = QApplication.instance()
     if app is None:

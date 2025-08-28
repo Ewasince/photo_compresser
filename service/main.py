@@ -55,14 +55,14 @@ class CompressionWorker(QThread):
         input_dir: Path,
         output_dir: Path,
         compression_settings: dict,
-    ):
+    ) -> None:
         super().__init__()
         self.compressor = compressor
         self.input_dir = input_dir
         self.output_dir = output_dir
         self.compression_settings = compression_settings
 
-    def run(self):
+    def run(self) -> None:
         """Run the compression process."""
         try:
             self.status_updated.emit("Starting compression...")
@@ -94,14 +94,14 @@ class CompressionWorker(QThread):
 class MainWindow(QMainWindow):
     """Main application window for image compression."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
-        self.compression_worker = None
-        self.output_directory = None
-        self.input_directory = None
+        self.compression_worker: CompressionWorker | None = None
+        self.output_directory: Path | None = None
+        self.input_directory: Path | None = None
 
         # Store all parameter widgets for dynamic UI updates
-        self.parameter_widgets = {}
+        self.parameter_widgets: dict[str, dict[str, QWidget]] = {}
 
         self.setup_ui()
         self.setup_connections()
@@ -132,7 +132,7 @@ class MainWindow(QMainWindow):
             }
         """)
 
-    def setup_ui(self):
+    def setup_ui(self) -> None:
         """Set up the user interface."""
         # Central widget
         central_widget = QWidget()
@@ -339,7 +339,7 @@ class MainWindow(QMainWindow):
         # Initialize format-specific settings visibility
         self.update_format_specific_settings()
 
-    def create_format_specific_settings(self):
+    def create_format_specific_settings(self) -> None:
         # Store all widgets for easy access
         self.parameter_widgets = {
             "jpeg": self._setup_advanced_for_jpeg(),
@@ -533,7 +533,7 @@ class MainWindow(QMainWindow):
             "tile_cols": self.avif_tile_cols,
         }
 
-    def update_format_specific_settings(self):
+    def update_format_specific_settings(self) -> None:
         """Update visibility of format-specific settings based on selected format."""
         format_name = self.format_combo.currentText().lower()
 
@@ -550,14 +550,14 @@ class MainWindow(QMainWindow):
         elif format_name == "avif":
             self.avif_group.setVisible(True)
 
-    def setup_connections(self):
+    def setup_connections(self) -> None:
         """Set up signal connections."""
         self.select_input_btn.clicked.connect(self.select_input_directory)
         self.compress_btn.clicked.connect(self.start_compression)
         self.compare_btn.clicked.connect(self.show_comparison)
         self.format_combo.currentTextChanged.connect(self.update_format_specific_settings)
 
-    def select_input_directory(self):
+    def select_input_directory(self) -> None:
         """Select input directory for compression."""
         directory = QFileDialog.getExistingDirectory(
             self, "Select Input Directory", "", QFileDialog.Option.ShowDirsOnly
@@ -568,6 +568,7 @@ class MainWindow(QMainWindow):
             self.input_dir_label.setText(str(self.input_directory))
             self.compress_btn.setEnabled(True)
             self.log_message(f"Selected input directory: {self.input_directory}")
+            self.compare_btn.setEnabled(True)
 
     def get_compression_parameters(self) -> dict[str, Any]:
         """Get all compression parameters from UI."""
@@ -632,9 +633,9 @@ class MainWindow(QMainWindow):
             return 2
         return -1  # Auto
 
-    def start_compression(self):
+    def start_compression(self) -> None:
         """Start the compression process."""
-        if not hasattr(self, "input_directory"):
+        if self.input_directory is None:
             QMessageBox.warning(self, "Warning", "Please select an input directory first.")
             return
 
@@ -688,6 +689,7 @@ class MainWindow(QMainWindow):
         compression_settings = compression_params.copy()
 
         # Create and start worker thread
+        assert self.output_directory is not None
         self.compression_worker = CompressionWorker(
             compressor,
             self.input_directory,
@@ -709,17 +711,17 @@ class MainWindow(QMainWindow):
         self.compression_worker.start()
         self.log_message("Starting compression process...")
 
-    def update_progress(self, current: int, total: int):
+    def update_progress(self, current: int, total: int) -> None:
         """Update progress bar."""
         self.progress_bar.setRange(0, total)
         self.progress_bar.setValue(current)
 
-    def update_status(self, message: str):
+    def update_status(self, message: str) -> None:
         """Update status message."""
         self.status_label.setText(message)
         self.log_message(message)
 
-    def compression_finished(self, stats: dict):
+    def compression_finished(self, stats: dict) -> None:
         """Handle compression completion."""
         # Update UI
         self.compress_btn.setEnabled(True)
@@ -747,9 +749,10 @@ Output directory: {self.output_directory}
         # Update status
         self.status_label.setText("Compression completed successfully!")
 
-    def compression_error(self, error_message: str):
+    def compression_error(self, error_message: str) -> None:
         """Handle compression error."""
         self.compress_btn.setEnabled(True)
+        self.compare_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         self.status_label.setText("Compression failed")
         self.log_message(f"ERROR: {error_message}")
@@ -759,13 +762,14 @@ Output directory: {self.output_directory}
             f"An error occurred during compression:\n\n{error_message}",
         )
 
-    def show_comparison(self):
+    def show_comparison(self) -> None:
         """Show the image comparison window."""
         if not self.output_directory or not self.output_directory.exists():
             QMessageBox.warning(self, "Warning", "Please complete compression first.")
             return
 
         try:
+            assert self.output_directory is not None
             # Create image pairs
             comparison_pairs = []
             image_pairs = create_image_pairs(self.output_directory, self.input_directory)
@@ -790,13 +794,13 @@ Output directory: {self.output_directory}
             self.log_message(f"Error opening comparison: {e}")
             QMessageBox.critical(self, "Error", f"Failed to open comparison window:\n\n{e!s}")
 
-    def log_message(self, message: str):
+    def log_message(self, message: str) -> None:
         """Add a message to the log."""
         timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_text.append(f"[{timestamp}] {message}")
 
 
-def main():
+def main() -> None:
     """Main application entry point."""
     app = QApplication(sys.argv)
 

@@ -50,19 +50,19 @@ class ImageCompressor:
         self.output_format = output_format.upper()
 
         # Store advanced parameters for each format
-        self.jpeg_params = {}
-        self.webp_params = {}
-        self.avif_params = {}
+        self.jpeg_params: dict[str, Any] = {}
+        self.webp_params: dict[str, Any] = {}
+        self.avif_params: dict[str, Any] = {}
 
-    def set_jpeg_parameters(self, **kwargs):
+    def set_jpeg_parameters(self, **kwargs: Any) -> None:
         """Set JPEG-specific compression parameters."""
         self.jpeg_params = kwargs
 
-    def set_webp_parameters(self, **kwargs):
+    def set_webp_parameters(self, **kwargs: Any) -> None:
         """Set WebP-specific compression parameters."""
         self.webp_params = kwargs
 
-    def set_avif_parameters(self, **kwargs):
+    def set_avif_parameters(self, **kwargs: Any) -> None:
         """Set AVIF-specific compression parameters."""
         self.avif_params = kwargs
 
@@ -161,7 +161,7 @@ class ImageCompressor:
             }
 
             # Call custom save function
-            save_jpeg(img, str(input_path), str(output_path), **params)
+            save_jpeg(img, input_path, output_path, **params)
             logger.info(f"Compressed JPEG: {input_path.name} -> {output_path.name}")
             return True
 
@@ -182,7 +182,7 @@ class ImageCompressor:
             }
 
             # Call custom save function
-            save_webp(img, str(input_path), str(output_path), **params)
+            save_webp(img, input_path, output_path, **params)
             logger.info(f"Compressed WebP: {input_path.name} -> {output_path.name}")
             return True
 
@@ -210,7 +210,7 @@ class ImageCompressor:
             # Call custom save function
             # Note: range_ is renamed to range in the function call
             avif_params = params.copy()
-            save_avif(img, str(input_path), str(output_path), **avif_params)
+            save_avif(img, input_path, output_path, **avif_params)
             logger.info(f"Compressed AVIF: {input_path.name} -> {output_path.name}")
             return True
 
@@ -414,10 +414,10 @@ def create_image_pairs(compressed_dir: Path, original_dir: Path | None = None) -
 
 def save_compression_settings(
     output_dir: Path,
-    compression_settings: dict,
+    compression_settings: dict[str, Any],
     image_pairs: list[tuple[Path, Path]],
-    stats: dict,
-):
+    stats: dict[str, Any],
+) -> Path | None:
     """
     Save compression settings and image pairs to a JSON file.
 
