@@ -7,7 +7,7 @@ Provides functionality for comparing pairs of images with interactive features.
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QPoint, QRect, QSize, Qt, pyqtSignal
+from PyQt6.QtCore import QPoint, QRect, QSize, Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
     QMouseEvent,
@@ -390,6 +390,21 @@ class ComparisonViewer(QWidget):
         )
 
 
+class _ThumbLoadThread(QThread):
+    """Background loader for thumbnails to keep UI responsive."""
+
+    loaded = pyqtSignal(QPixmap)
+
+    def __init__(self, pair: ImagePair, size: QSize) -> None:
+        super().__init__()
+        self.pair = pair
+        self.size = size
+
+    def run(self) -> None:
+        thumb = self.pair.create_thumbnail(self.size)
+        self.loaded.emit(thumb)
+
+
 class ThumbnailWidget(QWidget):
     """Widget for displaying a thumbnail in the carousel."""
 
@@ -400,9 +415,12 @@ class ThumbnailWidget(QWidget):
         self.image_pair = image_pair
         self.setFixedSize(120, 120)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        # Create thumbnail
-        self.thumbnail = image_pair.create_thumbnail(QSize(100, 100))
+        self.thumbnail_size = QSize(100, 100)
+        self._angle = 0
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._advance_spinner)
+        self._loader: _ThumbLoadThread | None = None
+        self._loading = False
 
         self.setStyleSheet("""
             QWidget {
@@ -417,14 +435,41 @@ class ThumbnailWidget(QWidget):
             }
         """)
 
+    def _advance_spinner(self) -> None:
+        if self._loading:
+            self._angle = (self._angle + 30) % 360
+            self.update()
+        else:
+            self._timer.stop()
+
+    def _on_loaded(self, _pix: QPixmap) -> None:
+        self._loading = False
+        self._loader = None
+        self.update()
+
     def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: ARG002
-        """Draw the thumbnail."""
+        """Draw the thumbnail or a loading spinner."""
         painter = QPainter(self)
+        thumb = self.image_pair.get_cached_thumbnail(self.thumbnail_size)
+        if thumb is None:
+            if not self._loading:
+                self._loading = True
+                self._timer.start(100)
+                self._loader = _ThumbLoadThread(self.image_pair, self.thumbnail_size)
+                self._loader.loaded.connect(self._on_loaded)
+                self._loader.start()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            radius = min(self.width(), self.height()) // 4
+            painter.translate(self.width() // 2, self.height() // 2)
+            painter.rotate(self._angle)
+            painter.setPen(QPen(QColor(200, 200, 200), 3))
+            painter.drawArc(QRect(-radius, -radius, 2 * radius, 2 * radius), 0, 270 * 16)
+            return
 
         # Draw thumbnail centered
-        x = (self.width() - self.thumbnail.width()) // 2
-        y = (self.height() - self.thumbnail.height()) // 2
-        painter.drawPixmap(x, y, self.thumbnail)
+        x = (self.width() - thumb.width()) // 2
+        y = (self.height() - thumb.height()) // 2
+        painter.drawPixmap(x, y, thumb)
 
         # Draw name at bottom
         painter.setPen(QPen(QColor(255, 255, 255)))
@@ -484,6 +529,15 @@ class ThumbnailCarousel(QScrollArea):
                 background-color: #888;
             }
         """)
+
+    def wheelEvent(self, event: QWheelEvent | None) -> None:
+        """Scroll horizontally with the mouse wheel."""
+        if event is None:
+            return
+        bar = self.horizontalScrollBar()
+        if bar is not None:
+            bar.setValue(bar.value() - event.angleDelta().y())
+        event.accept()
 
     def add_image_pair(self, image_pair: ImagePair) -> None:
         """Add an image pair thumbnail to the carousel."""
@@ -748,3 +802,20 @@ def show_comparison_window(
     window = ComparisonWindow(image_pairs, settings_file)
     window.show()
     return window
+
+
+def main() -> None:
+    """Run comparison viewer with image pairs from command line."""
+    files = sys.argv[1:]
+    pairs: list[ImagePair] = []
+    for i in range(0, len(files), 2):
+        if i + 1 < len(files):
+            pairs.append(ImagePair(files[i], files[i + 1]))
+    show_comparison_window(pairs)
+    app = QApplication.instance()
+    if app is not None:
+        app.exec()
+
+
+if __name__ == "__main__":
+    main()
