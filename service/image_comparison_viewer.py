@@ -38,6 +38,27 @@ from service.constants import SUPPORTED_EXTENSIONS
 from service.file_utils import format_timedelta
 from service.image_pair import ImagePair
 
+BUTTON_STYLE = """
+    QPushButton {
+        background-color: #0078d4;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        font-weight: bold;
+    }
+    QPushButton:hover {
+        background-color: #1088e6;
+    }
+    QPushButton:pressed {
+        background-color: #005a9e;
+    }
+    QPushButton:disabled {
+        background-color: #555;
+        color: #aaa;
+    }
+"""
+
 
 class ComparisonViewer(QWidget):
     """Main widget for displaying and comparing images."""
@@ -656,95 +677,20 @@ class MainWindow(QMainWindow):
         controls_layout = QHBoxLayout()
 
         self.load_config_button = QPushButton("Load Config")
-        self.load_config_button.setStyleSheet("""
-            QPushButton {
-                background-color: #005a9e;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #106ebe;
-            }
-            QPushButton:pressed {
-                background-color: #004578;
-            }
-        """)
+        self.load_config_button.setStyleSheet(BUTTON_STYLE)
 
         self.load_button = QPushButton("Load Image Pair")
-        self.load_button.setStyleSheet("""
-            QPushButton {
-                background-color: #0078d4;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #106ebe;
-            }
-            QPushButton:pressed {
-                background-color: #005a9e;
-            }
-        """)
+        self.load_button.setStyleSheet(BUTTON_STYLE)
 
         self.load_dirs_button = QPushButton("Load Directories")
-        self.load_dirs_button.setStyleSheet("""
-            QPushButton {
-                background-color: #008272;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #108775;
-            }
-            QPushButton:pressed {
-                background-color: #006f5f;
-            }
-        """)
+        self.load_dirs_button.setStyleSheet(BUTTON_STYLE)
 
         self.reset_button = QPushButton("Reset View")
-        self.reset_button.setStyleSheet("""
-            QPushButton {
-                background-color: #666;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #777;
-            }
-            QPushButton:pressed {
-                background-color: #555;
-            }
-        """)
+        self.reset_button.setStyleSheet(BUTTON_STYLE)
 
         self.stats_button = QPushButton("Compare Stats")
         self.stats_button.setEnabled(False)
-        self.stats_button.setStyleSheet("""
-            QPushButton {
-                background-color: #444;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #555;
-            }
-            QPushButton:pressed {
-                background-color: #333;
-            }
-        """)
+        self.stats_button.setStyleSheet(BUTTON_STYLE)
 
         controls_layout.addWidget(self.load_config_button)
         controls_layout.addWidget(self.load_button)
