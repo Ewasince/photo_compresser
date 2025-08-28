@@ -17,3 +17,134 @@ dev = [
     "pre-commit>=4.3.0",
     "ruff>=0.12.10",
 ]
+
+[tool.mypy]
+check_untyped_defs = true
+disallow_any_explicit = false
+disallow_incomplete_defs = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+explicit_package_bases = true
+extra_checks = true
+files = ["voice_assistant"]
+ignore_errors = false
+ignore_missing_imports = true
+namespace_packages = true
+no_implicit_optional = true
+plugins = ["pydantic.mypy"]
+python_version = "3.12"
+scripts_are_modules = true
+strict_equality = true
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+warn_untyped_fields = true
+
+[tool.ruff]
+exclude = [
+  ".bzr",
+  ".direnv",
+  ".eggs",
+  ".git",
+  ".git-rewrite",
+  ".hg",
+  ".ipynb_checkpoints",
+  ".mypy_cache",
+  ".nox",
+  ".pants.d",
+  ".pyenv",
+  ".pytest_cache",
+  ".pytype",
+  ".ruff_cache",
+  ".svn",
+  ".tox",
+  ".venv",
+  ".vscode",
+  "__pypackages__",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "node_modules",
+  "site-packages",
+  "venv",
+  "langflow_components",
+]
+fix = true
+indent-width = 4
+line-length = 120
+target-version = "py312"
+unsafe-fixes = true
+
+[tool.ruff.lint]
+ignore = [
+  "UP035",
+  "E722",
+  "S101",
+  "RUF001",
+  "RUF002",
+  "RUF003",
+  "PLR2004",
+  "PTH103",
+  "PTH113",
+  "PTH118",
+  "PTH119",
+  "ERA001",
+]
+# Enable rules, in addition to the defaults. https://docs.astral.sh/ruff/rules
+select = [
+  "E", # pycodestyle Error
+  "W", # pycodestyle Warning
+  "F", # Pyflakes
+  "I", # isort
+  "PL", # Pylint
+  "N", # pep8-naming
+  "ARG", # flake8-unused-arguments
+  "UP", # pyupgrade
+  "B", # flake8-bugbear
+  "C4", # flake8-comprehensions
+  "ASYNC", # flake8-async
+  "S", # flake8-bandit
+  "PIE", # flake8-pie
+  "PT", # flake8-pytest-style
+  "RET", # flake8-return
+  "SIM", # flake8-simplify
+  "PTH", # flake8-use-pathlib
+  "INP", # flake8-no-pep420
+  "DTZ", # flake8-datetimez
+  "NPY", # NumPy-specific rules
+  "RUF", # Ruff-specific rules
+  "ERA", # eradicate
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore rules for compiled protobuff modules
+"**/{grpc_types,generated}/*" = ["E", "N", "ARG", "PL", "UP", "F"]
+# Ignore bandit and other rules for tests and utils
+"{tests,utils,scripts}/*" = ["S", "PLR0913", "ARG002", "RUF001", "PLR2004", "N803"]
+"alembic/*" = ["INP001", "E402"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+
+[tool.ruff.lint.pylint]
+max-args = 7
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Body"]
+
+[tool.ruff.lint.flake8-unused-arguments]
+ignore-variadic-names = true
