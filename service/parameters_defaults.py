@@ -42,7 +42,7 @@ class AvifDefaults(TypedDict):
 
 BASIC_DEFAULTS: BasicDefaults = {
     "quality": 75,
-    "max_largest_enabled": True,
+    "max_largest_enabled": False,
     "max_largest_side": 1920,
     "max_smallest_enabled": True,
     "max_smallest_side": 1080,
