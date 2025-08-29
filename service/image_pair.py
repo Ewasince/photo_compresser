@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import cast
 
 from PIL import Image
-from PIL.ImageQt import ImageQt
+from PIL.ImageQt import toqimage, toqpixmap
 from PyQt6.QtCore import QBuffer, QIODevice, QSize
 from PyQt6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 
@@ -24,7 +24,7 @@ def _load_pixmap(path: str) -> QPixmap:
     """Load an image file into a :class:`QPixmap`."""
 
     image = Image.open(path).convert("RGBA")
-    return QPixmap.fromImage(ImageQt(image).copy())
+    return toqpixmap(image).copy()
 
 
 def _create_preview(path: str, width: int, height: int) -> QImage:
@@ -32,7 +32,7 @@ def _create_preview(path: str, width: int, height: int) -> QImage:
 
     image = Image.open(path).convert("RGBA")
     image.thumbnail((width, height), Image.Resampling.LANCZOS)
-    return ImageQt(image).copy()
+    return toqimage(image).copy()
 
 
 CONFIG: CacheConfig = load_cache_config()
