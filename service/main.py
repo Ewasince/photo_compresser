@@ -33,6 +33,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from service.constants import BUTTON_STYLE, STATUS_LABEL_STYLE, WINDOW_STYLE
 from service.file_utils import format_timedelta
 
 # Import our modules
@@ -171,28 +172,7 @@ class MainWindow(QMainWindow):
         # Set window properties
         self.setWindowTitle("Image Compression Tool")
         self.setGeometry(100, 100, 1000, 800)
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #f0f0f0;
-            }
-            QGroupBox {
-                font-weight: bold;
-                border: 2px solid #cccccc;
-                border-radius: 5px;
-                margin-top: 1ex;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-            QLabel[class="tooltip"] {
-                color: #666;
-                font-style: italic;
-                font-size: 11px;
-            }
-        """)
+        self.setStyleSheet(WINDOW_STYLE)
 
     def setup_ui(self) -> None:
         """Set up the user interface."""
@@ -223,22 +203,7 @@ class MainWindow(QMainWindow):
             "padding: 8px; background-color: white; border: 1px solid #ccc; border-radius: 4px;"
         )
         self.select_input_btn = QPushButton("Select Input Directory")
-        self.select_input_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0078d4;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #106ebe;
-            }
-            QPushButton:pressed {
-                background-color: #005a9e;
-            }
-        """)
+        self.select_input_btn.setStyleSheet(BUTTON_STYLE)
 
         input_dir_layout.addWidget(self.input_dir_label, 1)
         input_dir_layout.addWidget(self.select_input_btn)
@@ -252,22 +217,7 @@ class MainWindow(QMainWindow):
             "padding: 8px; background-color: white; border: 1px solid #ccc; border-radius: 4px;"
         )
         self.select_output_btn = QPushButton("Select Output Directory")
-        self.select_output_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0078d4;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #106ebe;
-            }
-            QPushButton:pressed {
-                background-color: #005a9e;
-            }
-        """)
+        self.select_output_btn.setStyleSheet(BUTTON_STYLE)
 
         # Ensure directory selection buttons have the same width
         button_width = max(
@@ -398,7 +348,7 @@ class MainWindow(QMainWindow):
         progress_layout.addWidget(self.progress_bar)
 
         self.status_label = QLabel("Ready to compress images")
-        self.status_label.setStyleSheet("color: #666; font-style: italic;")
+        self.status_label.setStyleSheet(STATUS_LABEL_STYLE)
         progress_layout.addWidget(self.status_label)
 
         main_layout.addWidget(progress_group)
@@ -430,26 +380,7 @@ class MainWindow(QMainWindow):
         self.compress_btn.setEnabled(False)
 
         self.compare_btn = QPushButton("Compare Images")
-        self.compare_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0078d4;
-                color: white;
-                border: none;
-                padding: 12px 24px;
-                border-radius: 6px;
-                font-weight: bold;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: #138496;
-            }
-            QPushButton:pressed {
-                background-color: #117a8b;
-            }
-            QPushButton:disabled {
-                background-color: #6c757d;
-            }
-        """)
+        self.compare_btn.setStyleSheet(BUTTON_STYLE)
 
         button_layout.addWidget(self.compress_btn)
         button_layout.addWidget(self.compare_btn)

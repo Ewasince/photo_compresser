@@ -34,31 +34,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from service.constants import SUPPORTED_EXTENSIONS
+from service.constants import (
+    BUTTON_STYLE,
+    STATUS_LABEL_STYLE,
+    SUPPORTED_EXTENSIONS,
+    WINDOW_STYLE,
+)
 from service.file_utils import format_timedelta
 from service.image_pair import ImagePair
-
-BUTTON_STYLE = """
-    QPushButton {
-        background-color: #0078d4;
-        color: white;
-        border: none;
-        padding: 8px 16px;
-        border-radius: 4px;
-        font-weight: bold;
-    }
-    QPushButton:hover {
-        background-color: #1088e6;
-    }
-    QPushButton:pressed {
-        background-color: #005a9e;
-    }
-    QPushButton:disabled {
-        background-color: #555;
-        color: #aaa;
-    }
-"""
-
 
 FORMATS_PATTERNS = " ".join(f"*.{f}" for f in SUPPORTED_EXTENSIONS)
 FORMATS_PATTERN = f"Images ({FORMATS_PATTERNS})"
@@ -798,11 +781,7 @@ class MainWindow(QMainWindow):
         # Set window properties
         self.setWindowTitle("Image Comparison Viewer")
         self.setGeometry(100, 100, 1200, 800)
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #1e1e1e;
-            }
-        """)
+        self.setStyleSheet(WINDOW_STYLE)
 
     def setup_ui(self) -> None:
         """Set up the user interface."""
@@ -843,7 +822,7 @@ class MainWindow(QMainWindow):
 
         # Status label
         self.status_label = QLabel("No images loaded")
-        self.status_label.setStyleSheet("color: #ccc; font-size: 12px;")
+        self.status_label.setStyleSheet(STATUS_LABEL_STYLE)
         controls_layout.addWidget(self.status_label)
 
         main_layout.addLayout(controls_layout)
