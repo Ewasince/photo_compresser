@@ -10,15 +10,18 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtConcurrent import map as concurrent_map  # type: ignore[attr-defined]
-from PySide6.QtCore import (  # type: ignore[attr-defined]
-    QFutureWatcher,
+from PySide6.QtCore import (
+    QMetaObject,
+    QObject,
     QPoint,
     QRect,
+    QRunnable,
     QSize,
     Qt,
+    QThreadPool,
     QTimer,
     Signal,
+    Slot,
 )
 from PySide6.QtGui import (
     QColor,
@@ -92,6 +95,42 @@ class LoadingDialog(QDialog):
 
         self.progress.setValue(current)
         self.label.setText(f"Generating previews: {current}/{self.progress.maximum()}")
+
+
+class ThumbnailObserver(QObject):
+    """Track progress of background thumbnail generation."""
+
+    progress = Signal(int)
+    finished = Signal()
+
+    def __init__(self, total: int) -> None:
+        super().__init__()
+        self.total = total
+        self.done = 0
+
+    @Slot()
+    def report_done(self) -> None:
+        self.done += 1
+        self.progress.emit(self.done)
+        if self.done >= self.total:
+            self.finished.emit()
+
+
+class ThumbnailRunnable(QRunnable):
+    """Worker that generates a thumbnail for a single image pair."""
+
+    def __init__(self, pair: ImagePair, observer: ThumbnailObserver) -> None:
+        super().__init__()
+        self.pair = pair
+        self.observer = observer
+
+    def run(self) -> None:  # pragma: no cover - thread pool execution
+        self.pair.create_thumbnail()
+        QMetaObject.invokeMethod(
+            self.observer,
+            b"report_done",
+            Qt.ConnectionType.QueuedConnection,
+        )
 
 
 FORMATS_PATTERNS = " ".join(f"*.{f}" for f in SUPPORTED_EXTENSIONS)
@@ -955,15 +994,13 @@ class MainWindow(QMainWindow):
 
         dialog = LoadingDialog(total, self)
 
-        watcher = QFutureWatcher(self)
-        watcher.progressValueChanged.connect(dialog.update_progress)
-        watcher.finished.connect(dialog.accept)
+        observer = ThumbnailObserver(total)
+        observer.progress.connect(dialog.update_progress)
+        observer.finished.connect(dialog.accept)
 
-        def generate(pair: ImagePair) -> None:
-            pair.create_thumbnail()
-
-        future = concurrent_map(self.image_pairs, generate)
-        watcher.setFuture(future)
+        pool = QThreadPool.globalInstance()
+        for pair in self.image_pairs:
+            pool.start(ThumbnailRunnable(pair, observer))
 
         dialog.exec()
 
