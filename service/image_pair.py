@@ -10,10 +10,11 @@ from __future__ import annotations
 import os
 from collections import OrderedDict
 from dataclasses import dataclass
+from typing import cast
 
 from PIL import Image
 from PIL.ImageQt import ImageQt
-from PyQt6.QtCore import QSize
+from PyQt6.QtCore import QBuffer, QIODevice, QSize
 from PyQt6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 
 from service.cache_config import CacheConfig, load_cache_config
@@ -109,3 +110,17 @@ class ImagePair:
     def create_thumbnail(self, size: QSize | None = None) -> QImage:
         size = size or QSize(100, 100)
         return _create_combined_preview(self.image1_path, self.image2_path, size)
+
+    def create_thumbnail_bytes(self, size: tuple[int, int] | QSize | None = None) -> bytes:
+        """Create a thumbnail and return it as PNG-encoded bytes."""
+        if size is None:
+            qsize = QSize(100, 100)
+        elif isinstance(size, tuple):
+            qsize = QSize(*size)
+        else:
+            qsize = size
+        image = _create_combined_preview(self.image1_path, self.image2_path, qsize)
+        buffer = QBuffer()
+        buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+        image.save(buffer, "PNG")
+        return cast(bytes, buffer.data())

@@ -6,7 +6,7 @@ A PyQt6 application for comparing pairs of images with interactive features.
 
 import json
 import sys
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, ClassVar
@@ -433,7 +433,7 @@ class ComparisonViewer(QWidget):
 class ThumbnailWidget(QWidget):
     """Widget for displaying a thumbnail in the carousel."""
 
-    _executor: ClassVar[ThreadPoolExecutor] = ThreadPoolExecutor(max_workers=2)
+    _executor: ClassVar[ProcessPoolExecutor] = ProcessPoolExecutor(max_workers=2)
 
     clicked = pyqtSignal(ImagePair)
 
@@ -445,7 +445,7 @@ class ThumbnailWidget(QWidget):
         self.thumbnail_size = QSize(100, 100)
         self._thumbnail: QPixmap | None = None
         self._is_loading = False
-        self._future: Future[QImage] | None = None
+        self._future: Future[bytes] | None = None
 
         self.setStyleSheet("""
             QWidget {
@@ -466,20 +466,24 @@ class ThumbnailWidget(QWidget):
             return
         self._is_loading = True
 
-        def handle_result(fut: Future[QImage]) -> None:
+        def handle_result(fut: Future[bytes]) -> None:
             if self._future is not fut:
                 return
             if fut.cancelled():
                 QTimer.singleShot(0, self._reset_state)
                 return
             try:
-                image = fut.result()
+                data = fut.result()
             except Exception:  # pragma: no cover - best effort
                 QTimer.singleShot(0, self._reset_state)
                 return
+            image = QImage.fromData(data, "PNG")
             QTimer.singleShot(0, lambda: self._set_thumbnail(QPixmap.fromImage(image)))
 
-        future = self._executor.submit(self.image_pair.create_thumbnail, self.thumbnail_size)
+        future = self._executor.submit(
+            self.image_pair.create_thumbnail_bytes,
+            (self.thumbnail_size.width(), self.thumbnail_size.height()),
+        )
         self._future = future
         future.add_done_callback(handle_result)
 
