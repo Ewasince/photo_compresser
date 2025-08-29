@@ -125,7 +125,7 @@ class ThumbnailRunnable(QRunnable):
         self.observer = observer
 
     def run(self) -> None:  # pragma: no cover - thread pool execution
-        self.pair.create_thumbnail()
+        self.pair.ensure_thumbnail_cached()
         QMetaObject.invokeMethod(
             self.observer,
             "report_done",
