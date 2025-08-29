@@ -77,7 +77,10 @@ class CompressionWorker(QThread):
 
             # Process the directory
             total_files, compressed_files, compressed_paths, failed_files = self.compressor.process_directory(
-                self.input_dir, self.output_dir, self.profiles
+                self.input_dir,
+                self.output_dir,
+                self.profiles,
+                progress_callback=lambda current, total: self.progress_updated.emit(current, total),
             )
 
             # Get compression statistics
