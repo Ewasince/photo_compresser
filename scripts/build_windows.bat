@@ -2,7 +2,6 @@
 setlocal
 
 REM Change to repository root
-pushd "%~dp0\.."
 
 call ".venv\Scripts\activate.bat"
 
@@ -15,5 +14,3 @@ python -m nuitka service\main.py ^
     --output-dir=dist
 
 move "dist\main.exe" "dist\photo_compresser.exe"
-
-popd
