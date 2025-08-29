@@ -411,7 +411,9 @@ class MainWindow(QMainWindow):
     def reset_settings(self) -> None:
         """Reset all compression settings to their default values."""
         for panel in self.profile_panels:
-            panel.reset_to_defaults()
+            panel.setParent(None)
+        self.profile_panels.clear()
+        self.add_profile_panel()
         self.log_message("Compression settings reset to defaults")
 
     def select_output_directory(self) -> None:
@@ -432,7 +434,9 @@ class MainWindow(QMainWindow):
 
     def add_profile_panel(self, profile: CompressionProfile | None = None) -> None:
         allow_conditions = len(self.profile_panels) > 0
-        panel = ProfilePanel(f"Profile {len(self.profile_panels) + 1}", allow_conditions=allow_conditions)
+        title = "Default" if not self.profile_panels else f"Profile {len(self.profile_panels) + 1}"
+        panel = ProfilePanel(title, allow_conditions=allow_conditions, removable=allow_conditions)
+        panel.remove_requested.connect(lambda p=panel: self.remove_profile_panel(p))
         self.profile_panels.append(panel)
         self.profiles_layout.addWidget(panel)
         if profile:
@@ -468,6 +472,11 @@ class MainWindow(QMainWindow):
         for profile in profiles:
             self.add_profile_panel(profile)
         self.log_message(f"Loaded {len(profiles)} profiles from {file_name}")
+
+    def remove_profile_panel(self, panel: ProfilePanel) -> None:
+        if panel in self.profile_panels:
+            self.profile_panels.remove(panel)
+            panel.setParent(None)
 
     def start_compression(self) -> None:
         """Start the compression process."""

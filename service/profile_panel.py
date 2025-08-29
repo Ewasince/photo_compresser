@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QSpinBox,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -53,25 +55,58 @@ def format_size(value: int) -> str:
     return f"{size:.0f}{unit}"
 
 
+SUBSAMPLING_MAP = {
+    "Auto (-1)": -1,
+    "4:4:4 (0)": 0,
+    "4:2:2 (1)": 1,
+    "4:2:0 (2)": 2,
+}
+
+
+def subsampling_label(value: int) -> str:
+    for label, val in SUBSAMPLING_MAP.items():
+        if val == value:
+            return label
+    return "Auto (-1)"
+
+
 class ProfilePanel(QWidget):
     """Panel containing compression parameters and matching conditions."""
 
-    def __init__(self, title: str, *, allow_conditions: bool = True, parent: QWidget | None = None) -> None:
+    remove_requested = Signal()
+
+    def __init__(
+        self,
+        title: str,
+        *,
+        allow_conditions: bool = True,
+        removable: bool = True,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self.title = title
         self.allow_conditions = allow_conditions
+        self.removable = removable
         self._build_ui()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Profile name
+        # Profile name and remove button
         name_layout = QHBoxLayout()
         name_layout.addWidget(QLabel("Name:"))
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText(self.title)
         name_layout.addWidget(self.name_edit)
+        name_layout.addStretch()
+        if self.removable:
+            remove_btn = QToolButton()
+            remove_btn.setText("✕")
+            remove_btn.setFixedSize(16, 16)
+            remove_btn.clicked.connect(self.remove_requested.emit)
+            name_layout.addWidget(remove_btn)
+            self.remove_btn = remove_btn
         layout.addLayout(name_layout)
 
         # Compression settings
@@ -126,7 +161,7 @@ class ProfilePanel(QWidget):
         jpeg_grid.addWidget(self.jpeg_progressive, 0, 0, 1, 2)
         jpeg_grid.addWidget(QLabel("Subsampling:"), 1, 0)
         self.jpeg_subsampling = QComboBox()
-        self.jpeg_subsampling.addItems(["Auto (-1)", "4:4:4 (0)", "4:2:2 (1)", "4:2:0 (2)"])
+        self.jpeg_subsampling.addItems(list(SUBSAMPLING_MAP.keys()))
         self.jpeg_subsampling.setCurrentText(JPEG_DEFAULTS["subsampling"])
         jpeg_grid.addWidget(self.jpeg_subsampling, 1, 1)
         self.jpeg_optimize = QCheckBox("Optimize")
@@ -348,7 +383,7 @@ class ProfilePanel(QWidget):
             "output_format": self.format_combo.currentText(),
             "jpeg_params": {
                 "progressive": self.jpeg_progressive.isChecked(),
-                "subsampling": self.jpeg_subsampling.currentText(),
+                "subsampling": SUBSAMPLING_MAP[self.jpeg_subsampling.currentText()],
                 "optimize": self.jpeg_optimize.isChecked(),
                 "smooth": self.jpeg_smooth.value(),
                 "keep_rgb": self.jpeg_keep_rgb.isChecked(),
@@ -440,7 +475,8 @@ class ProfilePanel(QWidget):
 
         jpeg = profile.jpeg_params
         self.jpeg_progressive.setChecked(jpeg.get("progressive", JPEG_DEFAULTS["progressive"]))
-        self.jpeg_subsampling.setCurrentText(jpeg.get("subsampling", JPEG_DEFAULTS["subsampling"]))
+        default_sub = SUBSAMPLING_MAP[JPEG_DEFAULTS["subsampling"]]
+        self.jpeg_subsampling.setCurrentText(subsampling_label(jpeg.get("subsampling", default_sub)))
         self.jpeg_optimize.setChecked(jpeg.get("optimize", JPEG_DEFAULTS["optimize"]))
         self.jpeg_smooth.setValue(jpeg.get("smooth", JPEG_DEFAULTS["smooth"]))
         self.jpeg_keep_rgb.setChecked(jpeg.get("keep_rgb", JPEG_DEFAULTS["keep_rgb"]))
