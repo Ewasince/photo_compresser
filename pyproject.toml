@@ -19,6 +19,8 @@ dev = [
     "pyqt6-stubs>=6.6.0",
     "pyinstaller>=6.15.0",
     "nuitka>=2.7.13",
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
 ]
 
 [tool.mypy]
