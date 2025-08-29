@@ -128,9 +128,9 @@ class ThumbnailRunnable(QRunnable):
         self.pair.create_thumbnail()
         QMetaObject.invokeMethod(
             self.observer,
-            b"report_done",
+            "report_done",
             Qt.ConnectionType.QueuedConnection,
-        )
+        )  # type: ignore[call-overload]
 
 
 FORMATS_PATTERNS = " ".join(f"*.{f}" for f in SUPPORTED_EXTENSIONS)
