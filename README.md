@@ -65,8 +65,12 @@ python main.py
 ```python
 from service.image_compression import ImageCompressor
 
-compressor = ImageCompressor(num_workers=4)
-compressor.process_directory(input_path, output_path, num_workers=4)
+# By default uses all available CPU cores
+compressor = ImageCompressor()
+compressor.process_directory(input_path, output_path)
+
+# Or specify a custom worker count
+# compressor.process_directory(input_path, output_path, num_workers=4)
 ```
 
 ### Сравнение изображений

@@ -5,6 +5,7 @@ Handles image compression with configurable quality and size parameters.
 """
 
 import logging
+import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -36,7 +37,7 @@ class ImageCompressor:
         max_smallest_side: int | None = 1080,
         preserve_structure: bool = True,
         output_format: str = "JPEG",
-        num_workers: int = 1,
+        num_workers: int = os.cpu_count() or 1,
     ):
         """
         Initialize the image compressor.
@@ -47,7 +48,8 @@ class ImageCompressor:
             max_smallest_side: Maximum size of the smallest side in pixels. If None, no limit.
             preserve_structure: Whether to preserve folder structure
             output_format: Output format ('JPEG', 'WebP', 'AVIF')
-            num_workers: Number of worker threads for parallel processing
+            num_workers: Number of worker threads for parallel processing.
+                Defaults to the number of CPU cores.
         """
         self.quality = max(1, min(100, quality))
         self.max_largest_side = max_largest_side
