@@ -9,7 +9,7 @@ LANGUAGES: dict[str, str] = {
 
 _translations: dict[str, dict[str, str]] = {
     "ru": {
-        "Image Compression Tool": "Инструмент сжатия изображений",
+        "Image Compression Tool": "Компрессор изображений",
         "Input Settings": "Настройки ввода",
         "No input directory selected": "Папка исходных файлов не выбрана",
         "Select Input Directory": "Выбрать папку источника",
