@@ -92,8 +92,8 @@ class ProfilePanel(QWidget):
         self.advanced_box = CollapsibleBox("Advanced Settings")
 
         # JPEG settings
-        jpeg_group = QGroupBox("JPEG")
-        jpeg_grid = QGridLayout(jpeg_group)
+        self.jpeg_group = QGroupBox("JPEG")
+        jpeg_grid = QGridLayout(self.jpeg_group)
         self.jpeg_progressive = QCheckBox("Progressive")
         self.jpeg_progressive.setChecked(JPEG_DEFAULTS["progressive"])
         jpeg_grid.addWidget(self.jpeg_progressive, 0, 0, 1, 2)
@@ -113,11 +113,11 @@ class ProfilePanel(QWidget):
         self.jpeg_keep_rgb = QCheckBox("Keep RGB")
         self.jpeg_keep_rgb.setChecked(JPEG_DEFAULTS["keep_rgb"])
         jpeg_grid.addWidget(self.jpeg_keep_rgb, 4, 0, 1, 2)
-        self.advanced_box.add_widget(jpeg_group)
+        self.advanced_box.add_widget(self.jpeg_group)
 
         # WebP settings
-        webp_group = QGroupBox("WebP")
-        webp_grid = QGridLayout(webp_group)
+        self.webp_group = QGroupBox("WebP")
+        webp_grid = QGridLayout(self.webp_group)
         self.webp_lossless = QCheckBox("Lossless")
         self.webp_lossless.setChecked(WEBP_DEFAULTS["lossless"])
         webp_grid.addWidget(self.webp_lossless, 0, 0, 1, 2)
@@ -134,11 +134,11 @@ class ProfilePanel(QWidget):
         self.webp_exact = QCheckBox("Exact alpha")
         self.webp_exact.setChecked(WEBP_DEFAULTS["exact"])
         webp_grid.addWidget(self.webp_exact, 3, 0, 1, 2)
-        self.advanced_box.add_widget(webp_group)
+        self.advanced_box.add_widget(self.webp_group)
 
         # AVIF settings
-        avif_group = QGroupBox("AVIF")
-        avif_grid = QGridLayout(avif_group)
+        self.avif_group = QGroupBox("AVIF")
+        avif_grid = QGridLayout(self.avif_group)
         avif_grid.addWidget(QLabel("Subsampling:"), 0, 0)
         self.avif_subsampling = QComboBox()
         self.avif_subsampling.addItems(["4:2:0", "4:2:2", "4:4:4"])
@@ -182,9 +182,12 @@ class ProfilePanel(QWidget):
         self.avif_tile_cols.setRange(0, 6)
         self.avif_tile_cols.setValue(AVIF_DEFAULTS["tile_cols"])
         avif_grid.addWidget(self.avif_tile_cols, 8, 1)
-        self.advanced_box.add_widget(avif_group)
+        self.advanced_box.add_widget(self.avif_group)
 
         layout.addWidget(self.advanced_box)
+
+        self.format_combo.currentTextChanged.connect(self._update_advanced_visibility)
+        self._update_advanced_visibility(self.format_combo.currentText())
 
         # Conditions sub-panel
         self.conditions_box = CollapsibleBox("Conditions")
@@ -277,6 +280,11 @@ class ProfilePanel(QWidget):
             self.conditions_box.toggle_button.setText("Conditions (default profile - always used)")
             self.conditions_box.toggle_button.setEnabled(False)
             self.conditions_box.content.setEnabled(False)
+
+    def _update_advanced_visibility(self, fmt: str) -> None:
+        self.jpeg_group.setVisible(fmt == "JPEG")
+        self.webp_group.setVisible(fmt == "WEBP")
+        self.avif_group.setVisible(fmt == "AVIF")
 
     # ------------------------------------------------------------------
     def get_parameters(self) -> dict[str, Any]:
