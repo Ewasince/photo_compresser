@@ -5,9 +5,9 @@ Main application for compressing images with configurable parameters.
 """
 
 import sys
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont, QIcon
@@ -58,12 +58,14 @@ class CompressionWorker(QThread):
         input_dir: Path,
         output_dir: Path,
         compression_settings: dict,
+        profiles: list[CompressionProfile],
     ) -> None:
         super().__init__()
         self.compressor = compressor
         self.input_dir = input_dir
         self.output_dir = output_dir
         self.compression_settings = compression_settings
+        self.profiles = profiles
 
     def run(self) -> None:
         """Run the compression process."""
@@ -73,7 +75,7 @@ class CompressionWorker(QThread):
 
             # Process the directory
             total_files, compressed_files, compressed_paths, failed_files = self.compressor.process_directory(
-                self.input_dir, self.output_dir
+                self.input_dir, self.output_dir, self.profiles
             )
 
             # Get compression statistics
@@ -442,14 +444,6 @@ class MainWindow(QMainWindow):
         if profile:
             panel.apply_profile(profile)
 
-    def get_compression_parameters(self) -> dict[str, Any]:
-        if not self.profile_panels:
-            return {}
-        params = self.profile_panels[0].get_parameters()
-        params["input_directory"] = str(self.input_directory)
-        params["output_directory"] = str(self.output_directory)
-        return params
-
     def save_profiles(self) -> None:
         file_name, _ = QFileDialog.getSaveFileName(self, "Save Profiles", "profiles.json", "JSON Files (*.json)")
         if not file_name:
@@ -494,24 +488,25 @@ class MainWindow(QMainWindow):
             self.output_directory = self.input_directory.parent / output_name
             self.output_dir_edit.setText(str(self.output_directory))
 
-        # Get all compression parameters
-        compression_params = self.get_compression_parameters()
+        profiles = [panel.to_profile() for panel in self.profile_panels]
+        default_profile = profiles[0]
 
-        # Create compressor with basic parameters
         compressor = ImageCompressor(
-            quality=compression_params["quality"],
-            max_largest_side=compression_params["max_largest_side"],
-            max_smallest_side=compression_params["max_smallest_side"],
-            preserve_structure=compression_params["preserve_structure"],
-            output_format=compression_params["output_format"],
+            quality=default_profile.quality,
+            max_largest_side=default_profile.max_largest_side,
+            max_smallest_side=default_profile.max_smallest_side,
+            preserve_structure=default_profile.preserve_structure,
+            output_format=default_profile.output_format,
         )
+        compressor.set_jpeg_parameters(**default_profile.jpeg_params)
+        compressor.set_webp_parameters(**default_profile.webp_params)
+        compressor.set_avif_parameters(**default_profile.avif_params)
 
-        compressor.set_jpeg_parameters(**compression_params["jpeg_params"])
-        compressor.set_webp_parameters(**compression_params["webp_params"])
-        compressor.set_avif_parameters(**compression_params["avif_params"])
-
-        # Store all parameters for the worker
-        compression_settings = compression_params.copy()
+        compression_settings = {
+            "input_directory": str(self.input_directory),
+            "output_directory": str(self.output_directory),
+            "profiles": [asdict(p) for p in profiles],
+        }
 
         # Create and start worker thread
         assert self.output_directory is not None
@@ -520,6 +515,7 @@ class MainWindow(QMainWindow):
             self.input_directory,
             self.output_directory,
             compression_settings,
+            profiles,
         )
         self.compression_worker.progress_updated.connect(self.update_progress)
         self.compression_worker.status_updated.connect(self.update_status)

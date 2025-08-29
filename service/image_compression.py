@@ -7,11 +7,12 @@ Handles image compression with configurable quality and size parameters.
 import logging
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from PIL import Image
 from pillow_heif import register_heif_opener
 
+from service.compression_profiles import CompressionProfile, select_profile
 from service.constants import SUPPORTED_EXTENSIONS
 from service.file_utils import copy_times_from_src
 from service.save_functions import save_avif, save_jpeg, save_webp
@@ -55,6 +56,17 @@ class ImageCompressor:
         self.jpeg_params: dict[str, Any] = {}
         self.webp_params: dict[str, Any] = {}
         self.avif_params: dict[str, Any] = {}
+
+    def apply_profile(self, profile: CompressionProfile) -> None:
+        """Apply settings from a compression profile to this compressor."""
+        self.quality = profile.quality
+        self.max_largest_side = profile.max_largest_side
+        self.max_smallest_side = profile.max_smallest_side
+        self.preserve_structure = profile.preserve_structure
+        self.output_format = profile.output_format.upper()
+        self.set_jpeg_parameters(**profile.jpeg_params)
+        self.set_webp_parameters(**profile.webp_params)
+        self.set_avif_parameters(**profile.avif_params)
 
     def set_jpeg_parameters(self, **kwargs: Any) -> None:
         """Set JPEG-specific compression parameters."""
@@ -240,7 +252,12 @@ class ImageCompressor:
             return ".avif"
         return ".jpg"  # Default fallback
 
-    def process_directory(self, input_root: Path, output_root: Path) -> tuple[int, int, list[Path], list[Path]]:
+    def process_directory(
+        self,
+        input_root: Path,
+        output_root: Path,
+        profiles: Sequence[CompressionProfile] | None = None,
+    ) -> tuple[int, int, list[Path], list[Path]]:
         """
         Process a directory recursively, compressing all supported images.
 
@@ -267,7 +284,12 @@ class ImageCompressor:
             if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
                 total_files += 1
 
-                # Determine output file path
+                if profiles:
+                    profile = select_profile(file_path, profiles)
+                    if profile:
+                        self.apply_profile(profile)
+
+                # Determine output file path after applying profile
                 if self.preserve_structure:
                     base_name = file_path.stem
                     new_extension = self._get_extension_according_format()

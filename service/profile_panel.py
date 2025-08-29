@@ -5,6 +5,7 @@ from typing import Any
 
 from PySide6.QtCore import QEvent, QObject, Signal
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -71,8 +72,11 @@ def subsampling_label(value: int) -> str:
 
 
 class _WheelBlocker(QObject):
-    def eventFilter(self, _obj: QObject, event: QEvent) -> bool:
-        return event.type() == QEvent.Type.Wheel
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.Wheel:
+            QApplication.sendEvent(obj.parent(), event)
+            return True
+        return False
 
 
 class ProfilePanel(QWidget):
