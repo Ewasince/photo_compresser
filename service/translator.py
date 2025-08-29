@@ -111,11 +111,10 @@ _translations: dict[str, dict[str, str]] = {
 
 def _detect_system_language() -> str:
     """Return a language code based on system locale."""
-    language, _ = locale.getlocale()
-    if language:
-        code = language.split("_")[0].lower()
-        if code in LANGUAGES:
-            return code
+    lang, _ = locale.getdefaultlocale()  # например "ru_RU" или "en_US"
+    if lang:
+        code = lang.split("_")[0].lower()
+        return code
     return "en"
 
 
