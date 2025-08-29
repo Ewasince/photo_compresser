@@ -273,8 +273,10 @@ class ImageCompressor:
         compressed_paths = []
         failed_files: list[Path] = []
 
-        # Ensure output directory exists
-        output_root.mkdir(parents=True, exist_ok=True)
+        # Ensure output directory does not already exist
+        if output_root.exists():
+            raise FileExistsError(f"Output directory {output_root} already exists")
+        output_root.mkdir(parents=True)
 
         # Walk through input directory
         for file_path in input_root.rglob("*"):

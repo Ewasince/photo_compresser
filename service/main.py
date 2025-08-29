@@ -23,7 +23,9 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QStyle,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -210,6 +212,10 @@ class MainWindow(QMainWindow):
         self.output_dir_edit.setStyleSheet(
             "padding: 8px; background-color: white; border: 1px solid #ccc; border-radius: 4px;"
         )
+        self.regen_output_btn = QToolButton()
+        self.regen_output_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
+        self.regen_output_btn.setToolTip("Regenerate output directory name")
+        self.regen_output_btn.clicked.connect(self.regenerate_output_directory)
         self.select_output_btn = QPushButton("Select Output Directory")
         self.select_output_btn.setStyleSheet("""
             QPushButton {
@@ -237,6 +243,7 @@ class MainWindow(QMainWindow):
         self.select_output_btn.setFixedWidth(button_width)
 
         output_dir_layout.addWidget(self.output_dir_edit, 1)
+        output_dir_layout.addWidget(self.regen_output_btn)
         output_dir_layout.addWidget(self.select_output_btn)
         input_layout.addLayout(output_dir_layout)
 
@@ -403,8 +410,7 @@ class MainWindow(QMainWindow):
         if directory:
             self.input_directory = Path(directory)
             self.input_dir_label.setText(str(self.input_directory))
-            default_name = f"{self.input_directory.name}_compressed_{datetime.now().strftime('%Y.%m.%d %H%M%S')}"
-            self.output_directory = self.input_directory.parent / default_name
+            self.output_directory = self.generate_output_directory()
             self.output_dir_edit.setText(str(self.output_directory))
             self.compress_btn.setEnabled(True)
             self.log_message(f"Selected input directory: {self.input_directory}")
@@ -433,6 +439,24 @@ class MainWindow(QMainWindow):
     def update_output_directory_from_text(self, text: str) -> None:
         """Update stored output directory when text changes."""
         self.output_directory = Path(text) if text else None
+
+    def generate_output_directory(self) -> Path:
+        assert self.input_directory is not None
+        base = f"{self.input_directory.name}_compressed_{datetime.now().strftime('%Y.%m.%d %H%M%S')}"
+        candidate = self.input_directory.parent / base
+        counter = 1
+        while candidate.exists():
+            candidate = self.input_directory.parent / f"{base}_{counter}"
+            counter += 1
+        return candidate
+
+    def regenerate_output_directory(self) -> None:
+        if self.input_directory is None:
+            QMessageBox.warning(self, "Warning", "Please select an input directory first.")
+            return
+        self.output_directory = self.generate_output_directory()
+        self.output_dir_edit.setText(str(self.output_directory))
+        self.log_message(f"Regenerated output directory: {self.output_directory}")
 
     def add_profile_panel(self, profile: CompressionProfile | None = None) -> None:
         allow_conditions = len(self.profile_panels) > 0
@@ -484,9 +508,16 @@ class MainWindow(QMainWindow):
             self.output_directory = Path(self.output_dir_edit.text())
 
         if self.output_directory is None:
-            output_name = f"{self.input_directory.name}_compressed_{datetime.now().strftime('%Y.%m.%d %H%M%S')}"
-            self.output_directory = self.input_directory.parent / output_name
+            self.output_directory = self.generate_output_directory()
             self.output_dir_edit.setText(str(self.output_directory))
+
+        if self.output_directory.exists():
+            QMessageBox.warning(
+                self,
+                "Warning",
+                "Output directory already exists. Please regenerate or choose another path.",
+            )
+            return
 
         profiles = [panel.to_profile() for panel in self.profile_panels]
         default_profile = profiles[0]
