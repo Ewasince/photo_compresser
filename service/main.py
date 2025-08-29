@@ -1004,9 +1004,8 @@ def main() -> None:
     """Main application entry point."""
     app = QApplication(sys.argv)
 
-
     icon_path = Path(__file__).resolve().parent.parent / "resources" / "bp.ico"
-    app.setWindowIcon(QIcon(str(icon_path)))   # общий значок для всех окон
+    app.setWindowIcon(QIcon(str(icon_path)))  # общий значок для всех окон
 
     # Set application style
     app.setStyle("Fusion")
