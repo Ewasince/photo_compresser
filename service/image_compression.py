@@ -5,7 +5,9 @@ Handles image compression with configurable quality and size parameters.
 """
 
 import logging
+import os
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -35,6 +37,7 @@ class ImageCompressor:
         max_smallest_side: int | None = 1080,
         preserve_structure: bool = True,
         output_format: str = "JPEG",
+        num_workers: int | None = None,
     ):
         """
         Initialize the image compressor.
@@ -45,17 +48,34 @@ class ImageCompressor:
             max_smallest_side: Maximum size of the smallest side in pixels. If None, no limit.
             preserve_structure: Whether to preserve folder structure
             output_format: Output format ('JPEG', 'WebP', 'AVIF')
+            num_workers: Number of parallel workers. ``None`` uses all available CPUs.
         """
         self.quality = max(1, min(100, quality))
         self.max_largest_side = max_largest_side
         self.max_smallest_side = max_smallest_side
         self.preserve_structure = preserve_structure
         self.output_format = output_format.upper()
+        self.num_workers = num_workers or os.cpu_count() or 1
 
         # Store advanced parameters for each format
         self.jpeg_params: dict[str, Any] = {}
         self.webp_params: dict[str, Any] = {}
         self.avif_params: dict[str, Any] = {}
+
+    def clone(self) -> "ImageCompressor":
+        """Create a copy of the compressor with the same settings."""
+        clone = ImageCompressor(
+            quality=self.quality,
+            max_largest_side=self.max_largest_side,
+            max_smallest_side=self.max_smallest_side,
+            preserve_structure=self.preserve_structure,
+            output_format=self.output_format,
+            num_workers=self.num_workers,
+        )
+        clone.set_jpeg_parameters(**self.jpeg_params)
+        clone.set_webp_parameters(**self.webp_params)
+        clone.set_avif_parameters(**self.avif_params)
+        return clone
 
     def apply_profile(self, profile: CompressionProfile) -> None:
         """Apply settings from a compression profile to this compressor."""
@@ -273,12 +293,12 @@ class ImageCompressor:
         compressed_paths = []
         failed_files: list[Path] = []
 
-        # Ensure output directory does not already exist
         if output_root.exists():
             raise FileExistsError(f"Output directory {output_root} already exists")
         output_root.mkdir(parents=True)
 
-        # Walk through input directory
+        image_tasks: list[tuple[ImageCompressor, Path, Path]] = []
+
         for file_path in input_root.rglob("*"):
             if not file_path.is_file():
                 continue
@@ -286,37 +306,25 @@ class ImageCompressor:
             if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
                 total_files += 1
 
+                compressor = self.clone()
                 if profiles:
                     profile = select_profile(file_path, profiles)
                     if profile:
-                        self.apply_profile(profile)
+                        compressor.apply_profile(profile)
 
-                # Determine output file path after applying profile
-                if self.preserve_structure:
-                    base_name = file_path.stem
-                    new_extension = self._get_extension_according_format()
+                base_name = file_path.stem
+                new_extension = compressor._get_extension_according_format()
+                if compressor.preserve_structure:
                     output_file = output_root / f"{base_name}{new_extension}"
                 else:
-                    base_name = file_path.stem
-                    new_extension = self._get_extension_according_format()
-                    counter = 1
                     output_file = output_root / f"{base_name}{new_extension}"
+                    counter = 1
                     while output_file.exists():
                         output_file = output_root / f"{base_name}_{counter}{new_extension}"
                         counter += 1
 
-                # Compress the image
-                saved_path = self.compress_image(file_path, output_file)
-                if saved_path:
-                    compressed_files += 1
-                    compressed_paths.append(saved_path)
-                    copy_times_from_src(file_path, saved_path)
-                    logger.info(f"Successfully compressed: {file_path.name}")
-                else:
-                    logger.warning(f"Failed to compress: {file_path.name}")
-                    failed_files.append(file_path)
+                image_tasks.append((compressor, file_path, output_file))
             else:
-                # Copy non-image files to output directory
                 if self.preserve_structure:
                     rel_path = file_path.relative_to(input_root)
                     output_file = output_root / rel_path
@@ -331,6 +339,21 @@ class ImageCompressor:
                 shutil.copyfile(file_path, output_file)
                 copy_times_from_src(file_path, output_file)
                 logger.info(f"Copied non-image file: {file_path.name}")
+
+        def _worker(task: tuple["ImageCompressor", Path, Path]) -> tuple[Path, Path | None]:
+            compressor, path, out_file = task
+            return path, compressor.compress_image(path, out_file)
+
+        with ThreadPoolExecutor(max_workers=self.num_workers) as executor:
+            for file_path, saved_path in executor.map(_worker, image_tasks):
+                if saved_path:
+                    compressed_files += 1
+                    compressed_paths.append(saved_path)
+                    copy_times_from_src(file_path, saved_path)
+                    logger.info(f"Successfully compressed: {file_path.name}")
+                else:
+                    logger.warning(f"Failed to compress: {file_path.name}")
+                    failed_files.append(file_path)
 
         logger.info(f"Compression complete: {compressed_files}/{total_files} files processed")
         return total_files, compressed_files, compressed_paths, failed_files
