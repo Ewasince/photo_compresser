@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from PySide6.QtWidgets import (
@@ -17,13 +18,39 @@ from PySide6.QtWidgets import (
 )
 
 from service.collapsible_box import CollapsibleBox
-from service.compression_profiles import CompressionProfile, ProfileConditions
+from service.compression_profiles import (
+    CompressionProfile,
+    NumericCondition,
+    ProfileConditions,
+)
 from service.parameters_defaults import (
     AVIF_DEFAULTS,
     BASIC_DEFAULTS,
     JPEG_DEFAULTS,
     WEBP_DEFAULTS,
 )
+
+
+def parse_size(text: str) -> int | None:
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([KMG]?B)?", text.strip(), re.IGNORECASE)
+    if not match:
+        return None
+    number = float(match.group(1))
+    unit = (match.group(2) or "B").upper()
+    factor = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3}[unit]
+    return int(number * factor)
+
+
+def format_size(value: int) -> str:
+    unit = "B"
+    size = float(value)
+    for unit in ["B", "KB", "MB", "GB"]:
+        if size < 1024 or unit == "GB":
+            break
+        size /= 1024
+    if unit == "B":
+        return f"{int(size)}B"
+    return f"{size:.0f}{unit}"
 
 
 class ProfilePanel(QWidget):
@@ -195,51 +222,65 @@ class ProfilePanel(QWidget):
         cond_grid = QGridLayout(conditions_widget)
         row = 0
 
-        self.cond_smallest_cb = QCheckBox("Max smallest side:")
+        self.cond_smallest_cb = QCheckBox("Smallest side:")
         cond_grid.addWidget(self.cond_smallest_cb, row, 0)
+        self.cond_smallest_op = QComboBox()
+        self.cond_smallest_op.addItems(["<=", "<", ">=", ">", "=="])
+        self.cond_smallest_op.setEnabled(False)
+        cond_grid.addWidget(self.cond_smallest_op, row, 1)
         self.cond_smallest = QSpinBox()
         self.cond_smallest.setRange(1, 10000)
         self.cond_smallest.setEnabled(False)
-        cond_grid.addWidget(self.cond_smallest, row, 1)
-        self.cond_smallest_cb.stateChanged.connect(lambda s: self.cond_smallest.setEnabled(bool(s)))
+        cond_grid.addWidget(self.cond_smallest, row, 2)
+        self.cond_smallest_cb.stateChanged.connect(
+            lambda s: self._toggle_widgets(s, self.cond_smallest, self.cond_smallest_op)
+        )
         row += 1
 
-        self.cond_largest_cb = QCheckBox("Max largest side:")
+        self.cond_largest_cb = QCheckBox("Largest side:")
         cond_grid.addWidget(self.cond_largest_cb, row, 0)
+        self.cond_largest_op = QComboBox()
+        self.cond_largest_op.addItems(["<=", "<", ">=", ">", "=="])
+        self.cond_largest_op.setEnabled(False)
+        cond_grid.addWidget(self.cond_largest_op, row, 1)
         self.cond_largest = QSpinBox()
         self.cond_largest.setRange(1, 10000)
         self.cond_largest.setEnabled(False)
-        cond_grid.addWidget(self.cond_largest, row, 1)
-        self.cond_largest_cb.stateChanged.connect(lambda s: self.cond_largest.setEnabled(bool(s)))
+        cond_grid.addWidget(self.cond_largest, row, 2)
+        self.cond_largest_cb.stateChanged.connect(
+            lambda s: self._toggle_widgets(s, self.cond_largest, self.cond_largest_op)
+        )
         row += 1
 
-        self.cond_pixels_cb = QCheckBox("Max pixels:")
+        self.cond_pixels_cb = QCheckBox("Pixels:")
         cond_grid.addWidget(self.cond_pixels_cb, row, 0)
+        self.cond_pixels_op = QComboBox()
+        self.cond_pixels_op.addItems(["<=", "<", ">=", ">", "=="])
+        self.cond_pixels_op.setEnabled(False)
+        cond_grid.addWidget(self.cond_pixels_op, row, 1)
         self.cond_pixels = QSpinBox()
         self.cond_pixels.setRange(1, 1_000_000_000)
         self.cond_pixels.setEnabled(False)
-        cond_grid.addWidget(self.cond_pixels, row, 1)
-        self.cond_pixels_cb.stateChanged.connect(lambda s: self.cond_pixels.setEnabled(bool(s)))
+        cond_grid.addWidget(self.cond_pixels, row, 2)
+        self.cond_pixels_cb.stateChanged.connect(
+            lambda s: self._toggle_widgets(s, self.cond_pixels, self.cond_pixels_op)
+        )
         row += 1
 
-        self.cond_min_aspect_cb = QCheckBox("Min aspect ratio:")
-        cond_grid.addWidget(self.cond_min_aspect_cb, row, 0)
-        self.cond_min_aspect = QDoubleSpinBox()
-        self.cond_min_aspect.setRange(0.01, 100.0)
-        self.cond_min_aspect.setSingleStep(0.1)
-        self.cond_min_aspect.setEnabled(False)
-        cond_grid.addWidget(self.cond_min_aspect, row, 1)
-        self.cond_min_aspect_cb.stateChanged.connect(lambda s: self.cond_min_aspect.setEnabled(bool(s)))
-        row += 1
-
-        self.cond_max_aspect_cb = QCheckBox("Max aspect ratio:")
-        cond_grid.addWidget(self.cond_max_aspect_cb, row, 0)
-        self.cond_max_aspect = QDoubleSpinBox()
-        self.cond_max_aspect.setRange(0.01, 100.0)
-        self.cond_max_aspect.setSingleStep(0.1)
-        self.cond_max_aspect.setEnabled(False)
-        cond_grid.addWidget(self.cond_max_aspect, row, 1)
-        self.cond_max_aspect_cb.stateChanged.connect(lambda s: self.cond_max_aspect.setEnabled(bool(s)))
+        self.cond_aspect_cb = QCheckBox("Aspect ratio:")
+        cond_grid.addWidget(self.cond_aspect_cb, row, 0)
+        self.cond_aspect_op = QComboBox()
+        self.cond_aspect_op.addItems(["<=", "<", ">=", ">", "=="])
+        self.cond_aspect_op.setEnabled(False)
+        cond_grid.addWidget(self.cond_aspect_op, row, 1)
+        self.cond_aspect = QDoubleSpinBox()
+        self.cond_aspect.setRange(0.01, 100.0)
+        self.cond_aspect.setSingleStep(0.1)
+        self.cond_aspect.setEnabled(False)
+        cond_grid.addWidget(self.cond_aspect, row, 2)
+        self.cond_aspect_cb.stateChanged.connect(
+            lambda s: self._toggle_widgets(s, self.cond_aspect, self.cond_aspect_op)
+        )
         row += 1
 
         cond_grid.addWidget(QLabel("Orientation:"), row, 0)
@@ -260,13 +301,18 @@ class ProfilePanel(QWidget):
         cond_grid.addWidget(self.transparency_combo, row, 1)
         row += 1
 
-        self.cond_bytes_cb = QCheckBox("Max file size (bytes):")
+        self.cond_bytes_cb = QCheckBox("File size:")
         cond_grid.addWidget(self.cond_bytes_cb, row, 0)
-        self.cond_bytes = QSpinBox()
-        self.cond_bytes.setRange(1, 1_000_000_000)
+        self.cond_bytes_op = QComboBox()
+        self.cond_bytes_op.addItems(["<=", "<", ">=", ">", "=="])
+        self.cond_bytes_op.setEnabled(False)
+        cond_grid.addWidget(self.cond_bytes_op, row, 1)
+        self.cond_bytes = QLineEdit()
+        self.cond_bytes.setPlaceholderText("1MB")
+        self.cond_bytes.setToolTip("Examples: 500KB, 2MB, 1.5GB")
         self.cond_bytes.setEnabled(False)
-        cond_grid.addWidget(self.cond_bytes, row, 1)
-        self.cond_bytes_cb.stateChanged.connect(lambda s: self.cond_bytes.setEnabled(bool(s)))
+        cond_grid.addWidget(self.cond_bytes, row, 2)
+        self.cond_bytes_cb.stateChanged.connect(lambda s: self._toggle_widgets(s, self.cond_bytes, self.cond_bytes_op))
         row += 1
 
         cond_grid.addWidget(QLabel("Required EXIF (k=v,...):"), row, 0)
@@ -280,6 +326,11 @@ class ProfilePanel(QWidget):
             self.conditions_box.toggle_button.setText("Conditions (default profile - always used)")
             self.conditions_box.toggle_button.setEnabled(False)
             self.conditions_box.content.setEnabled(False)
+
+    def _toggle_widgets(self, state: int, *widgets: QWidget) -> None:
+        enabled = bool(state)
+        for w in widgets:
+            w.setEnabled(enabled)
 
     def _update_advanced_visibility(self, fmt: str) -> None:
         self.jpeg_group.setVisible(fmt == "JPEG")
@@ -325,12 +376,20 @@ class ProfilePanel(QWidget):
         """Return matching conditions configured in the panel."""
         if not self.allow_conditions:
             return ProfileConditions()
+        bytes_val = parse_size(self.cond_bytes.text()) if self.cond_bytes_cb.isChecked() else None
         return ProfileConditions(
-            max_input_smallest_side=self.cond_smallest.value() if self.cond_smallest_cb.isChecked() else None,
-            max_input_largest_side=self.cond_largest.value() if self.cond_largest_cb.isChecked() else None,
-            max_input_pixels=self.cond_pixels.value() if self.cond_pixels_cb.isChecked() else None,
-            min_aspect_ratio=self.cond_min_aspect.value() if self.cond_min_aspect_cb.isChecked() else None,
-            max_aspect_ratio=self.cond_max_aspect.value() if self.cond_max_aspect_cb.isChecked() else None,
+            smallest_side=NumericCondition(self.cond_smallest_op.currentText(), self.cond_smallest.value())
+            if self.cond_smallest_cb.isChecked()
+            else None,
+            largest_side=NumericCondition(self.cond_largest_op.currentText(), self.cond_largest.value())
+            if self.cond_largest_cb.isChecked()
+            else None,
+            pixel_count=NumericCondition(self.cond_pixels_op.currentText(), self.cond_pixels.value())
+            if self.cond_pixels_cb.isChecked()
+            else None,
+            aspect_ratio=NumericCondition(self.cond_aspect_op.currentText(), self.cond_aspect.value())
+            if self.cond_aspect_cb.isChecked()
+            else None,
             orientation=None if self.orientation_combo.currentText() == "Any" else self.orientation_combo.currentText(),
             input_formats=[s.strip() for s in self.input_formats_edit.text().split(",") if s.strip()] or None,
             requires_transparency={
@@ -338,7 +397,7 @@ class ProfilePanel(QWidget):
                 "Requires": True,
                 "No": False,
             }[self.transparency_combo.currentText()],
-            max_input_bytes=self.cond_bytes.value() if self.cond_bytes_cb.isChecked() else None,
+            file_size=NumericCondition(self.cond_bytes_op.currentText(), bytes_val) if bytes_val is not None else None,
             required_exif=dict(part.split("=", 1) for part in self.exif_edit.text().split(",") if "=" in part) or None,
         )
 
@@ -404,40 +463,41 @@ class ProfilePanel(QWidget):
         self.avif_tile_cols.setValue(avif.get("tile_cols", AVIF_DEFAULTS["tile_cols"]))
 
         cond = profile.conditions
-        if cond.max_input_smallest_side is not None:
+        if cond.smallest_side is not None:
             self.cond_smallest_cb.setChecked(True)
-            self.cond_smallest.setValue(cond.max_input_smallest_side)
+            self.cond_smallest_op.setCurrentText(cond.smallest_side.op)
+            self.cond_smallest.setValue(int(cond.smallest_side.value))
         else:
             self.cond_smallest_cb.setChecked(False)
             self.cond_smallest.setEnabled(False)
+            self.cond_smallest_op.setEnabled(False)
 
-        if cond.max_input_largest_side is not None:
+        if cond.largest_side is not None:
             self.cond_largest_cb.setChecked(True)
-            self.cond_largest.setValue(cond.max_input_largest_side)
+            self.cond_largest_op.setCurrentText(cond.largest_side.op)
+            self.cond_largest.setValue(int(cond.largest_side.value))
         else:
             self.cond_largest_cb.setChecked(False)
             self.cond_largest.setEnabled(False)
+            self.cond_largest_op.setEnabled(False)
 
-        if cond.max_input_pixels is not None:
+        if cond.pixel_count is not None:
             self.cond_pixels_cb.setChecked(True)
-            self.cond_pixels.setValue(cond.max_input_pixels)
+            self.cond_pixels_op.setCurrentText(cond.pixel_count.op)
+            self.cond_pixels.setValue(int(cond.pixel_count.value))
         else:
             self.cond_pixels_cb.setChecked(False)
             self.cond_pixels.setEnabled(False)
+            self.cond_pixels_op.setEnabled(False)
 
-        if cond.min_aspect_ratio is not None:
-            self.cond_min_aspect_cb.setChecked(True)
-            self.cond_min_aspect.setValue(cond.min_aspect_ratio)
+        if cond.aspect_ratio is not None:
+            self.cond_aspect_cb.setChecked(True)
+            self.cond_aspect_op.setCurrentText(cond.aspect_ratio.op)
+            self.cond_aspect.setValue(cond.aspect_ratio.value)
         else:
-            self.cond_min_aspect_cb.setChecked(False)
-            self.cond_min_aspect.setEnabled(False)
-
-        if cond.max_aspect_ratio is not None:
-            self.cond_max_aspect_cb.setChecked(True)
-            self.cond_max_aspect.setValue(cond.max_aspect_ratio)
-        else:
-            self.cond_max_aspect_cb.setChecked(False)
-            self.cond_max_aspect.setEnabled(False)
+            self.cond_aspect_cb.setChecked(False)
+            self.cond_aspect.setEnabled(False)
+            self.cond_aspect_op.setEnabled(False)
 
         if cond.orientation:
             self.orientation_combo.setCurrentText(cond.orientation)
@@ -456,12 +516,15 @@ class ProfilePanel(QWidget):
         else:
             self.transparency_combo.setCurrentText("Any")
 
-        if cond.max_input_bytes is not None:
+        if cond.file_size is not None:
             self.cond_bytes_cb.setChecked(True)
-            self.cond_bytes.setValue(cond.max_input_bytes)
+            self.cond_bytes_op.setCurrentText(cond.file_size.op)
+            self.cond_bytes.setText(format_size(int(cond.file_size.value)))
         else:
             self.cond_bytes_cb.setChecked(False)
             self.cond_bytes.setEnabled(False)
+            self.cond_bytes_op.setEnabled(False)
+            self.cond_bytes.clear()
 
         if cond.required_exif:
             self.exif_edit.setText(",".join(f"{k}={v}" for k, v in cond.required_exif.items()))
@@ -506,17 +569,21 @@ class ProfilePanel(QWidget):
 
         self.cond_smallest_cb.setChecked(False)
         self.cond_smallest.setEnabled(False)
+        self.cond_smallest_op.setEnabled(False)
         self.cond_largest_cb.setChecked(False)
         self.cond_largest.setEnabled(False)
+        self.cond_largest_op.setEnabled(False)
         self.cond_pixels_cb.setChecked(False)
         self.cond_pixels.setEnabled(False)
-        self.cond_min_aspect_cb.setChecked(False)
-        self.cond_min_aspect.setEnabled(False)
-        self.cond_max_aspect_cb.setChecked(False)
-        self.cond_max_aspect.setEnabled(False)
+        self.cond_pixels_op.setEnabled(False)
+        self.cond_aspect_cb.setChecked(False)
+        self.cond_aspect.setEnabled(False)
+        self.cond_aspect_op.setEnabled(False)
         self.orientation_combo.setCurrentText("Any")
         self.input_formats_edit.clear()
         self.transparency_combo.setCurrentText("Any")
         self.cond_bytes_cb.setChecked(False)
         self.cond_bytes.setEnabled(False)
+        self.cond_bytes_op.setEnabled(False)
+        self.cond_bytes.clear()
         self.exif_edit.clear()

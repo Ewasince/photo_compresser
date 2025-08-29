@@ -11,19 +11,40 @@ from PIL import ExifTags, Image
 
 
 @dataclass(slots=True)
+class NumericCondition:
+    """Numeric comparison condition."""
+
+    op: str
+    value: float
+
+
+@dataclass(slots=True)
 class ProfileConditions:
     """Conditions for selecting a compression profile."""
 
-    max_input_smallest_side: int | None = None
-    max_input_largest_side: int | None = None
-    max_input_pixels: int | None = None
-    min_aspect_ratio: float | None = None
-    max_aspect_ratio: float | None = None
+    smallest_side: NumericCondition | None = None
+    largest_side: NumericCondition | None = None
+    pixel_count: NumericCondition | None = None
+    aspect_ratio: NumericCondition | None = None
     orientation: str | None = None
     input_formats: list[str] | None = None
     requires_transparency: bool | None = None
-    max_input_bytes: int | None = None
+    file_size: NumericCondition | None = None
     required_exif: dict[str, Any] | None = None
+
+    @staticmethod
+    def _match(cond: NumericCondition | None, actual: float | None) -> bool:
+        if cond is None:
+            return True
+        if actual is None:
+            return False
+        return {
+            "<": actual < cond.value,
+            "<=": actual <= cond.value,
+            ">": actual > cond.value,
+            ">=": actual >= cond.value,
+            "==": actual == cond.value,
+        }.get(cond.op, False)
 
     def matches(
         self,
@@ -43,21 +64,38 @@ class ProfileConditions:
         orientation = "square" if width == height else ("landscape" if width > height else "portrait")
 
         conditions = [
-            self.max_input_smallest_side is None or smallest_side <= self.max_input_smallest_side,
-            self.max_input_largest_side is None or largest_side <= self.max_input_largest_side,
-            self.max_input_pixels is None or pixels <= self.max_input_pixels,
-            self.min_aspect_ratio is None or aspect_ratio >= self.min_aspect_ratio,
-            self.max_aspect_ratio is None or aspect_ratio <= self.max_aspect_ratio,
+            self._match(self.smallest_side, smallest_side),
+            self._match(self.largest_side, largest_side),
+            self._match(self.pixel_count, pixels),
+            self._match(self.aspect_ratio, aspect_ratio),
             self.orientation is None or orientation == self.orientation,
             self.input_formats is None
             or (image_format is not None and image_format.upper() in [f.upper() for f in self.input_formats]),
             self.requires_transparency is None
             or (has_transparency is not None and has_transparency == self.requires_transparency),
-            self.max_input_bytes is None or (file_size is not None and file_size <= self.max_input_bytes),
+            self._match(self.file_size, file_size),
             not self.required_exif
             or (exif is not None and all(exif.get(k) == v for k, v in self.required_exif.items())),
         ]
         return all(conditions)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ProfileConditions:
+        def _nc(key: str) -> NumericCondition | None:
+            val = data.get(key)
+            return NumericCondition(**val) if isinstance(val, dict) else None
+
+        return cls(
+            smallest_side=_nc("smallest_side"),
+            largest_side=_nc("largest_side"),
+            pixel_count=_nc("pixel_count"),
+            aspect_ratio=_nc("aspect_ratio"),
+            orientation=data.get("orientation"),
+            input_formats=data.get("input_formats"),
+            requires_transparency=data.get("requires_transparency"),
+            file_size=_nc("file_size"),
+            required_exif=data.get("required_exif"),
+        )
 
 
 @dataclass(slots=True)
@@ -91,7 +129,7 @@ def load_profiles(file_path: Path) -> list[CompressionProfile]:
     raw = json.loads(file_path.read_text(encoding="utf-8"))
     profiles: list[CompressionProfile] = []
     for item in raw:
-        cond = ProfileConditions(**item.get("conditions", {}))
+        cond = ProfileConditions.from_dict(item.get("conditions", {}))
         profile = CompressionProfile(
             name=item["name"],
             quality=item.get("quality", 75),

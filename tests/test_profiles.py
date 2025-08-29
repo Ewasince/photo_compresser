@@ -4,6 +4,7 @@ from PIL import Image
 
 from service.compression_profiles import (
     CompressionProfile,
+    NumericCondition,
     ProfileConditions,
     load_profiles,
     save_profiles,
@@ -16,7 +17,7 @@ def test_profile_save_load_and_selection(tmp_path: Path) -> None:
         CompressionProfile(
             name="small",
             quality=90,
-            conditions=ProfileConditions(max_input_smallest_side=1080),
+            conditions=ProfileConditions(smallest_side=NumericCondition(op="<=", value=1080)),
         ),
         CompressionProfile(name="default", quality=75),
     ]
