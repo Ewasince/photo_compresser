@@ -9,9 +9,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
@@ -87,10 +87,10 @@ class CollapsibleBox(QWidget):
 class CompressionWorker(QThread):
     """Worker thread for image compression to avoid blocking the UI."""
 
-    progress_updated = pyqtSignal(int, int)  # current, total
-    status_updated = pyqtSignal(str)
-    compression_finished = pyqtSignal(dict)  # stats
-    error_occurred = pyqtSignal(str)
+    progress_updated = Signal(int, int)  # current, total
+    status_updated = Signal(str)
+    compression_finished = Signal(dict)  # stats
+    error_occurred = Signal(str)
 
     def __init__(
         self,

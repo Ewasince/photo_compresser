@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Image Comparison Viewer
-A PyQt6 application for comparing pairs of images with interactive features.
+A PySide6 application for comparing pairs of images with interactive features.
 """
 
 import json
@@ -10,8 +10,8 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import (
+from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import (
     QColor,
     QMouseEvent,
     QPainter,
@@ -20,7 +20,7 @@ from PyQt6.QtGui import (
     QPixmap,
     QWheelEvent,
 )
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QFileDialog,
@@ -429,7 +429,7 @@ class ComparisonViewer(QWidget):
 class ThumbnailWidget(QWidget):
     """Widget for displaying a thumbnail in the carousel."""
 
-    clicked = pyqtSignal(ImagePair)
+    clicked = Signal(ImagePair)
 
     def __init__(self, image_pair: ImagePair, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -518,7 +518,7 @@ class ThumbnailWidget(QWidget):
 class ThumbnailCarousel(QScrollArea):
     """Horizontal scroll area for displaying image pair thumbnails."""
 
-    thumbnail_clicked = pyqtSignal(ImagePair)
+    thumbnail_clicked = Signal(ImagePair)
 
     def __init__(self) -> None:
         super().__init__()
