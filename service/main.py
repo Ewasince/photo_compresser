@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
@@ -44,6 +45,7 @@ from service.image_compression import (
     save_compression_settings,
 )
 from service.profile_panel import ProfilePanel
+from service.translator import LANGUAGES, set_language, tr
 
 
 class CompressionWorker(QThread):
@@ -72,7 +74,7 @@ class CompressionWorker(QThread):
     def run(self) -> None:
         """Run the compression process."""
         try:
-            self.status_updated.emit("Starting compression...")
+            self.status_updated.emit(tr("Starting compression..."))
             start_time = datetime.now()
 
             # Process the directory
@@ -109,12 +111,16 @@ class CompressionWorker(QThread):
                 )
 
             self.status_updated.emit(
-                f"Compression completed! {compressed_files}/{total_files} files compressed. {len(failed_files)} failed."
+                tr("Compression completed! {compressed}/{total} files compressed. {failed} failed.").format(
+                    compressed=compressed_files,
+                    total=total_files,
+                    failed=len(failed_files),
+                )
             )
             self.compression_finished.emit(stats)
 
         except Exception as e:
-            self.error_occurred.emit(f"Compression error: {e!s}")
+            self.error_occurred.emit(tr("Compression error: {error}").format(error=e))
 
 
 class MainWindow(QMainWindow):
@@ -128,9 +134,10 @@ class MainWindow(QMainWindow):
 
         self.setup_ui()
         self.setup_connections()
+        self.update_translations()
 
         # Set window properties
-        self.setWindowTitle("Image Compression Tool")
+        self.setWindowTitle(tr("Image Compression Tool"))
         self.setGeometry(100, 100, 1000, 800)
         self.setStyleSheet("""
             QMainWindow {
@@ -166,24 +173,35 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(20)
 
+        # Language selection
+        lang_layout = QHBoxLayout()
+        lang_layout.addStretch()
+        self.lang_label = QLabel(tr("Language:"))
+        self.language_combo = QComboBox()
+        for code, name in LANGUAGES.items():
+            self.language_combo.addItem(name, code)
+        lang_layout.addWidget(self.lang_label)
+        lang_layout.addWidget(self.language_combo)
+        main_layout.addLayout(lang_layout)
+
         # Title
-        title_label = QLabel("Image Compression Tool")
-        title_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
-        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_label.setStyleSheet("color: #333; margin-bottom: 10px;")
-        main_layout.addWidget(title_label)
+        self.title_label = QLabel(tr("Image Compression Tool"))
+        self.title_label.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.title_label.setStyleSheet("color: #333; margin-bottom: 10px;")
+        main_layout.addWidget(self.title_label)
 
         # Input section
-        input_group = QGroupBox("Input Settings")
-        input_layout = QVBoxLayout(input_group)
+        self.input_group = QGroupBox(tr("Input Settings"))
+        input_layout = QVBoxLayout(self.input_group)
 
         # Input directory selection
         input_dir_layout = QHBoxLayout()
-        self.input_dir_label = QLabel("No input directory selected")
+        self.input_dir_label = QLabel(tr("No input directory selected"))
         self.input_dir_label.setStyleSheet(
             "padding: 8px; background-color: white; border: 1px solid #ccc; border-radius: 4px;"
         )
-        self.select_input_btn = QPushButton("Select Input Directory")
+        self.select_input_btn = QPushButton(tr("Select Input Directory"))
         self.select_input_btn.setStyleSheet("""
             QPushButton {
                 background-color: #0078d4;
@@ -208,15 +226,15 @@ class MainWindow(QMainWindow):
         # Output directory selection
         output_dir_layout = QHBoxLayout()
         self.output_dir_edit = QLineEdit()
-        self.output_dir_edit.setPlaceholderText("No output directory selected")
+        self.output_dir_edit.setPlaceholderText(tr("No output directory selected"))
         self.output_dir_edit.setStyleSheet(
             "padding: 8px; background-color: white; border: 1px solid #ccc; border-radius: 4px;"
         )
         self.regen_output_btn = QToolButton()
         self.regen_output_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
-        self.regen_output_btn.setToolTip("Regenerate output directory name")
+        self.regen_output_btn.setToolTip(tr("Regenerate output directory name"))
         self.regen_output_btn.clicked.connect(self.regenerate_output_directory)
-        self.select_output_btn = QPushButton("Select Output Directory")
+        self.select_output_btn = QPushButton(tr("Select Output Directory"))
         self.select_output_btn.setStyleSheet("""
             QPushButton {
                 background-color: #0078d4;
@@ -247,7 +265,7 @@ class MainWindow(QMainWindow):
         output_dir_layout.addWidget(self.select_output_btn)
         input_layout.addLayout(output_dir_layout)
 
-        main_layout.addWidget(input_group)
+        main_layout.addWidget(self.input_group)
 
         # Create scrollable area for compression settings
         scroll_area = QScrollArea()
@@ -266,19 +284,19 @@ class MainWindow(QMainWindow):
         header_layout.setContentsMargins(0, 0, 10, 0)
         header_layout.addStretch()
 
-        self.save_profiles_btn = QPushButton("Save Profiles")
+        self.save_profiles_btn = QPushButton(tr("Save Profiles"))
         self.save_profiles_btn.clicked.connect(self.save_profiles)
         header_layout.addWidget(self.save_profiles_btn)
 
-        self.load_profiles_btn = QPushButton("Load Profiles")
+        self.load_profiles_btn = QPushButton(tr("Load Profiles"))
         self.load_profiles_btn.clicked.connect(self.load_profiles)
         header_layout.addWidget(self.load_profiles_btn)
 
-        self.add_profile_btn = QPushButton("Add Profile")
+        self.add_profile_btn = QPushButton(tr("Add Profile"))
         self.add_profile_btn.clicked.connect(self.add_profile_panel)
         header_layout.addWidget(self.add_profile_btn)
 
-        self.reset_btn = QPushButton("Reset Settings")
+        self.reset_btn = QPushButton(tr("Reset Settings"))
         self.reset_btn.setStyleSheet("""
             QPushButton {
                 background-color: #e0e0e0;
@@ -308,23 +326,23 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(scroll_area)
 
         # Progress section
-        progress_group = QGroupBox("Progress")
-        progress_layout = QVBoxLayout(progress_group)
+        self.progress_group = QGroupBox(tr("Progress"))
+        progress_layout = QVBoxLayout(self.progress_group)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         progress_layout.addWidget(self.progress_bar)
 
-        self.status_label = QLabel("Ready to compress images")
+        self.status_label = QLabel(tr("Ready to compress images"))
         self.status_label.setStyleSheet("color: #666; font-style: italic;")
         progress_layout.addWidget(self.status_label)
 
-        main_layout.addWidget(progress_group)
+        main_layout.addWidget(self.progress_group)
 
         # Action buttons
         button_layout = QHBoxLayout()
 
-        self.compress_btn = QPushButton("Start Compression")
+        self.compress_btn = QPushButton(tr("Start Compression"))
         self.compress_btn.setStyleSheet("""
             QPushButton {
                 background-color: #28a745;
@@ -347,7 +365,7 @@ class MainWindow(QMainWindow):
         """)
         self.compress_btn.setEnabled(False)
 
-        self.compare_btn = QPushButton("Compare Images")
+        self.compare_btn = QPushButton(tr("Compare Images"))
         self.compare_btn.setStyleSheet("""
             QPushButton {
                 background-color: #0078d4;
@@ -374,8 +392,8 @@ class MainWindow(QMainWindow):
         main_layout.addLayout(button_layout)
 
         # Log section
-        log_group = QGroupBox("Log")
-        log_layout = QVBoxLayout(log_group)
+        self.log_group = QGroupBox(tr("Log"))
+        log_layout = QVBoxLayout(self.log_group)
 
         self.log_text = QTextEdit()
         self.log_text.setMaximumHeight(150)
@@ -390,7 +408,7 @@ class MainWindow(QMainWindow):
         """)
         log_layout.addWidget(self.log_text)
 
-        main_layout.addWidget(log_group)
+        main_layout.addWidget(self.log_group)
 
     def setup_connections(self) -> None:
         """Set up signal connections."""
@@ -400,11 +418,44 @@ class MainWindow(QMainWindow):
         self.compress_btn.clicked.connect(self.start_compression)
         self.compare_btn.clicked.connect(self.show_comparison)
         self.reset_btn.clicked.connect(self.reset_settings)
+        self.language_combo.currentIndexChanged.connect(self.change_language)
+
+    def change_language(self) -> None:
+        """Handle language selection changes."""
+        code = self.language_combo.currentData()
+        set_language(code)
+        self.update_translations()
+        for panel in self.profile_panels:
+            if hasattr(panel, "update_translations"):
+                panel.update_translations()
+
+    def update_translations(self) -> None:
+        """Update UI text for the selected language."""
+        self.setWindowTitle(tr("Image Compression Tool"))
+        self.title_label.setText(tr("Image Compression Tool"))
+        self.input_group.setTitle(tr("Input Settings"))
+        if self.input_directory is None:
+            self.input_dir_label.setText(tr("No input directory selected"))
+        self.select_input_btn.setText(tr("Select Input Directory"))
+        if self.output_directory is None:
+            self.output_dir_edit.setPlaceholderText(tr("No output directory selected"))
+        self.regen_output_btn.setToolTip(tr("Regenerate output directory name"))
+        self.select_output_btn.setText(tr("Select Output Directory"))
+        self.save_profiles_btn.setText(tr("Save Profiles"))
+        self.load_profiles_btn.setText(tr("Load Profiles"))
+        self.add_profile_btn.setText(tr("Add Profile"))
+        self.reset_btn.setText(tr("Reset Settings"))
+        self.progress_group.setTitle(tr("Progress"))
+        self.status_label.setText(tr("Ready to compress images"))
+        self.compress_btn.setText(tr("Start Compression"))
+        self.compare_btn.setText(tr("Compare Images"))
+        self.log_group.setTitle(tr("Log"))
+        self.lang_label.setText(tr("Language:"))
 
     def select_input_directory(self) -> None:
         """Select input directory for compression."""
         directory = QFileDialog.getExistingDirectory(
-            self, "Select Input Directory", "", QFileDialog.Option.ShowDirsOnly
+            self, tr("Select Input Directory"), "", QFileDialog.Option.ShowDirsOnly
         )
 
         if directory:
@@ -428,7 +479,7 @@ class MainWindow(QMainWindow):
         """Select output directory for compression results."""
         initial_dir = str(self.output_directory.parent) if self.output_directory else ""
         directory = QFileDialog.getExistingDirectory(
-            self, "Select Output Directory", initial_dir, QFileDialog.Option.ShowDirsOnly
+            self, tr("Select Output Directory"), initial_dir, QFileDialog.Option.ShowDirsOnly
         )
 
         if directory:
@@ -452,7 +503,7 @@ class MainWindow(QMainWindow):
 
     def regenerate_output_directory(self) -> None:
         if self.input_directory is None:
-            QMessageBox.warning(self, "Warning", "Please select an input directory first.")
+            QMessageBox.warning(self, tr("Warning"), tr("Please select an input directory first."))
             return
         self.output_directory = self.generate_output_directory()
         self.output_dir_edit.setText(str(self.output_directory))
@@ -460,7 +511,9 @@ class MainWindow(QMainWindow):
 
     def add_profile_panel(self, profile: CompressionProfile | None = None) -> None:
         allow_conditions = len(self.profile_panels) > 0
-        title = "Default" if not self.profile_panels else f"Profile {len(self.profile_panels) + 1}"
+        title = (
+            tr("Default") if not self.profile_panels else tr("Profile {num}").format(num=len(self.profile_panels) + 1)
+        )
         panel = ProfilePanel(title, allow_conditions=allow_conditions, removable=allow_conditions)
         panel.remove_requested.connect(lambda p=panel: self.remove_profile_panel(p))
         self.profile_panels.append(panel)
@@ -469,7 +522,7 @@ class MainWindow(QMainWindow):
             panel.apply_profile(profile)
 
     def save_profiles(self) -> None:
-        file_name, _ = QFileDialog.getSaveFileName(self, "Save Profiles", "profiles.json", "JSON Files (*.json)")
+        file_name, _ = QFileDialog.getSaveFileName(self, tr("Save Profiles"), "profiles.json", "JSON Files (*.json)")
         if not file_name:
             return
         profiles = [panel.to_profile() for panel in self.profile_panels]
@@ -477,12 +530,12 @@ class MainWindow(QMainWindow):
         self.log_message(f"Saved {len(profiles)} profiles to {file_name}")
 
     def load_profiles(self) -> None:
-        file_name, _ = QFileDialog.getOpenFileName(self, "Load Profiles", "", "JSON Files (*.json)")
+        file_name, _ = QFileDialog.getOpenFileName(self, tr("Load Profiles"), "", "JSON Files (*.json)")
         if not file_name:
             return
         profiles = load_profiles(Path(file_name))
         if not profiles:
-            QMessageBox.warning(self, "Warning", "No profiles found in file.")
+            QMessageBox.warning(self, tr("Warning"), tr("No profiles found in file."))
             return
         for panel in self.profile_panels:
             panel.setParent(None)
@@ -499,7 +552,7 @@ class MainWindow(QMainWindow):
     def start_compression(self) -> None:
         """Start the compression process."""
         if self.input_directory is None:
-            QMessageBox.warning(self, "Warning", "Please select an input directory first.")
+            QMessageBox.warning(self, tr("Warning"), tr("Please select an input directory first."))
             return
 
         # Ensure output directory is set
@@ -514,8 +567,8 @@ class MainWindow(QMainWindow):
         if self.output_directory.exists():
             QMessageBox.warning(
                 self,
-                "Warning",
-                "Output directory already exists. Please regenerate or choose another path.",
+                tr("Warning"),
+                tr("Output directory already exists. Please regenerate or choose another path."),
             )
             return
 
@@ -596,22 +649,22 @@ Output directory: {self.output_directory}
         """
 
         self.log_message("Compression completed successfully!")
-        QMessageBox.information(self, "Compression Complete", message)
+        QMessageBox.information(self, tr("Compression Complete"), message)
 
         # Update status
-        self.status_label.setText("Compression completed successfully!")
+        self.status_label.setText(tr("Compression completed successfully!"))
 
     def compression_error(self, error_message: str) -> None:
         """Handle compression error."""
         self.compress_btn.setEnabled(True)
         self.compare_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
-        self.status_label.setText("Compression failed")
+        self.status_label.setText(tr("Compression failed"))
         self.log_message(f"ERROR: {error_message}")
         QMessageBox.critical(
             self,
-            "Compression Error",
-            f"An error occurred during compression:\n\n{error_message}",
+            tr("Compression Error"),
+            tr("An error occurred during compression:\n\n{error}").format(error=error_message),
         )
 
     def show_comparison(self) -> None:
@@ -633,7 +686,11 @@ Output directory: {self.output_directory}
 
         except Exception as e:
             self.log_message(f"Error opening comparison: {e}")
-            QMessageBox.critical(self, "Error", f"Failed to open comparison window:\n\n{e!s}")
+            QMessageBox.critical(
+                self,
+                tr("Error"),
+                tr("Failed to open comparison window:\n\n{error}").format(error=e),
+            )
 
     def log_message(self, message: str) -> None:
         """Add a message to the log."""
