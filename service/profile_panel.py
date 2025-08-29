@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import QEvent, QObject, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -70,6 +70,11 @@ def subsampling_label(value: int) -> str:
     return "Auto (-1)"
 
 
+class _WheelBlocker(QObject):
+    def eventFilter(self, _obj: QObject, event: QEvent) -> bool:
+        return event.type() == QEvent.Type.Wheel
+
+
 class ProfilePanel(QWidget):
     """Panel containing compression parameters and matching conditions."""
 
@@ -87,6 +92,7 @@ class ProfilePanel(QWidget):
         self.title = title
         self.allow_conditions = allow_conditions
         self.removable = removable
+        self._wheel_blocker = _WheelBlocker(self)
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -106,6 +112,7 @@ class ProfilePanel(QWidget):
             remove_btn.setFixedSize(16, 16)
             remove_btn.clicked.connect(self.remove_requested.emit)
             name_layout.addWidget(remove_btn)
+            name_layout.addSpacing(4)
             self.remove_btn = remove_btn
         layout.addLayout(name_layout)
 
@@ -356,6 +363,10 @@ class ProfilePanel(QWidget):
 
         self.conditions_box.add_widget(conditions_widget)
         layout.addWidget(self.conditions_box)
+
+        for w in self.findChildren(QWidget):
+            if isinstance(w, QSpinBox | QDoubleSpinBox | QComboBox):
+                w.installEventFilter(self._wheel_blocker)
 
         if not self.allow_conditions:
             self.conditions_box.toggle_button.setText("Conditions (default profile - always used)")
