@@ -10,7 +10,16 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtConcurrent import map as concurrent_map  # type: ignore[attr-defined]
+from PySide6.QtCore import (  # type: ignore[attr-defined]
+    QFutureWatcher,
+    QPoint,
+    QRect,
+    QSize,
+    Qt,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import (
     QColor,
     QMouseEvent,
@@ -945,13 +954,18 @@ class MainWindow(QMainWindow):
             return
 
         dialog = LoadingDialog(total, self)
-        dialog.show()
-        QApplication.processEvents()
-        for idx, pair in enumerate(self.image_pairs, start=1):
+
+        watcher = QFutureWatcher(self)
+        watcher.progressValueChanged.connect(dialog.update_progress)
+        watcher.finished.connect(dialog.accept)
+
+        def generate(pair: ImagePair) -> None:
             pair.create_thumbnail()
-            dialog.update_progress(idx)
-            QApplication.processEvents()
-        dialog.close()
+
+        future = concurrent_map(self.image_pairs, generate)
+        watcher.setFuture(future)
+
+        dialog.exec()
 
     def load_config(self) -> None:
         """Load image pairs from a compression settings file."""
