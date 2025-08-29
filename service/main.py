@@ -13,22 +13,16 @@ from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
-    QComboBox,
     QFileDialog,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
-    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
     QScrollArea,
-    QSpinBox,
     QTextEdit,
     QToolButton,
     QVBoxLayout,
@@ -48,12 +42,7 @@ from service.image_compression import (
     create_image_pairs,
     save_compression_settings,
 )
-from service.parameters_defaults import (
-    AVIF_DEFAULTS,
-    BASIC_DEFAULTS,
-    JPEG_DEFAULTS,
-    WEBP_DEFAULTS,
-)
+from service.profile_panel import ProfilePanel
 
 
 class CollapsibleBox(QWidget):
@@ -168,9 +157,6 @@ class MainWindow(QMainWindow):
         self.compression_worker: CompressionWorker | None = None
         self.output_directory: Path | None = None
         self.input_directory: Path | None = None
-
-        # Store all parameter widgets for dynamic UI updates
-        self.parameter_widgets: dict[str, dict[str, QWidget]] = {}
 
         self.setup_ui()
         self.setup_connections()
@@ -307,12 +293,17 @@ class MainWindow(QMainWindow):
         header_layout.setContentsMargins(0, 0, 10, 0)
         header_layout.addStretch()
 
-        self.profiles_btn = QPushButton("Profiles")
-        self.profiles_menu = QMenu(self.profiles_btn)
-        self.profiles_menu.addAction("Save", self.save_profiles)
-        self.profiles_menu.addAction("Load", self.load_profiles)
-        self.profiles_btn.setMenu(self.profiles_menu)
-        header_layout.addWidget(self.profiles_btn)
+        self.save_profiles_btn = QPushButton("Save Profiles")
+        self.save_profiles_btn.clicked.connect(self.save_profiles)
+        header_layout.addWidget(self.save_profiles_btn)
+
+        self.load_profiles_btn = QPushButton("Load Profiles")
+        self.load_profiles_btn.clicked.connect(self.load_profiles)
+        header_layout.addWidget(self.load_profiles_btn)
+
+        self.add_profile_btn = QPushButton("Add Profile")
+        self.add_profile_btn.clicked.connect(self.add_profile_panel)
+        header_layout.addWidget(self.add_profile_btn)
 
         self.reset_btn = QPushButton("Reset Settings")
         self.reset_btn.setStyleSheet("""
@@ -334,72 +325,11 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(self.reset_btn)
         self.settings_layout.addLayout(header_layout)
 
-        # Basic settings group
-        self.basic_group = QGroupBox("Basic Settings")
-        self.basic_layout = QGridLayout(self.basic_group)
+        self.profiles_layout = QVBoxLayout()
+        self.settings_layout.addLayout(self.profiles_layout)
 
-        # Quality setting (common for all formats)
-        self.basic_layout.addWidget(QLabel("Quality:"), 0, 0)
-        self.quality_spinbox = QSpinBox()
-        self.quality_spinbox.setRange(1, 100)
-        self.quality_spinbox.setValue(BASIC_DEFAULTS["quality"])
-        self.quality_spinbox.setSuffix("%")
-        self.quality_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
-        self.quality_spinbox.setToolTip("Quality level (1-100). Lower values = stronger compression, smaller files")
-        self.basic_layout.addWidget(self.quality_spinbox, 0, 1)
-
-        # Max largest side
-        self.max_largest_checkbox = QCheckBox("Max Largest Side:")
-        self.max_largest_checkbox.setChecked(BASIC_DEFAULTS["max_largest_enabled"])
-        self.max_largest_checkbox.setToolTip("Enable maximum size limit for the largest side")
-        self.basic_layout.addWidget(self.max_largest_checkbox, 1, 0)
-        self.max_largest_spinbox = QSpinBox()
-        self.max_largest_spinbox.setRange(100, 10000)
-        self.max_largest_spinbox.setValue(BASIC_DEFAULTS["max_largest_side"])
-        self.max_largest_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
-        self.max_largest_spinbox.setToolTip("Maximum size of the largest side in pixels")
-        self.max_largest_checkbox.toggled.connect(self.max_largest_spinbox.setEnabled)
-        self.max_largest_spinbox.setEnabled(self.max_largest_checkbox.isChecked())
-        self.basic_layout.addWidget(self.max_largest_spinbox, 1, 1)
-
-        # Max smallest side
-        self.max_smallest_checkbox = QCheckBox("Max Smallest Side:")
-        self.max_smallest_checkbox.setChecked(BASIC_DEFAULTS["max_smallest_enabled"])
-        self.max_smallest_checkbox.setToolTip("Enable maximum size limit for the smallest side")
-        self.basic_layout.addWidget(self.max_smallest_checkbox, 2, 0)
-        self.max_smallest_spinbox = QSpinBox()
-        self.max_smallest_spinbox.setRange(100, 10000)
-        self.max_smallest_spinbox.setValue(BASIC_DEFAULTS["max_smallest_side"])
-        self.max_smallest_spinbox.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
-        self.max_smallest_spinbox.setToolTip("Maximum size of the smallest side in pixels")
-        self.max_smallest_checkbox.toggled.connect(self.max_smallest_spinbox.setEnabled)
-        self.max_smallest_spinbox.setEnabled(self.max_smallest_checkbox.isChecked())
-        self.basic_layout.addWidget(self.max_smallest_spinbox, 2, 1)
-
-        # Output format
-        self.basic_layout.addWidget(QLabel("Output Format:"), 3, 0)
-        self.format_combo = QComboBox()
-        self.format_combo.addItems(["JPEG", "WebP", "AVIF"])
-        self.format_combo.setCurrentText(BASIC_DEFAULTS["output_format"])
-        self.format_combo.setStyleSheet("padding: 5px; border: 1px solid #ccc; border-radius: 4px;")
-        self.format_combo.setToolTip("Output image format")
-        self.basic_layout.addWidget(self.format_combo, 3, 1)
-
-        # Preserve original structure
-        self.preserve_structure_checkbox = QCheckBox("Preserve folder structure")
-        self.preserve_structure_checkbox.setChecked(BASIC_DEFAULTS["preserve_structure"])
-        self.preserve_structure_checkbox.setToolTip(
-            "Keep original folder structure or flatten all files to output directory"
-        )
-        self.basic_layout.addWidget(self.preserve_structure_checkbox, 4, 0, 1, 2)
-
-        self.settings_layout.addWidget(self.basic_group)
-
-        self.advanced_box = CollapsibleBox("Advanced Settings")
-        self.settings_layout.addWidget(self.advanced_box)
-
-        # Format-specific settings groups
-        self.create_format_specific_settings()
+        self.profile_panels: list[ProfilePanel] = []
+        self.add_profile_panel()
 
         scroll_area.setWidget(self.settings_container)
         main_layout.addWidget(scroll_area)
@@ -489,220 +419,6 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(log_group)
 
-        # Initialize format-specific settings visibility
-        self.update_format_specific_settings()
-
-    def create_format_specific_settings(self) -> None:
-        # Store all widgets for easy access
-        self.parameter_widgets = {
-            "jpeg": self._setup_advanced_for_jpeg(),
-            "webp": self._setup_advanced_for_webp(),
-            "avif": self._setup_advanced_for_avif(),
-        }
-
-    def _setup_advanced_for_jpeg(self) -> dict:
-        # JPEG Settings
-        self.jpeg_group = QGroupBox("JPEG Advanced Settings")
-        self.jpeg_group.setVisible(False)
-        jpeg_layout = QGridLayout(self.jpeg_group)
-
-        # Progressive
-        jpeg_layout.addWidget(QLabel("Progressive:"), 0, 0)
-        self.jpeg_progressive = QCheckBox()
-        self.jpeg_progressive.setChecked(JPEG_DEFAULTS["progressive"])
-        self.jpeg_progressive.setToolTip("Progressive JPEG encoding. Sometimes reduces file size")
-        jpeg_layout.addWidget(self.jpeg_progressive, 0, 1)
-
-        # Subsampling
-        jpeg_layout.addWidget(QLabel("Subsampling:"), 1, 0)
-        self.jpeg_subsampling = QComboBox()
-        self.jpeg_subsampling.addItems(["Auto (-1)", "4:4:4 (0)", "4:2:2 (1)", "4:2:0 (2)"])
-        self.jpeg_subsampling.setCurrentText(JPEG_DEFAULTS["subsampling"])
-        self.jpeg_subsampling.setToolTip("Color subsampling. 4:4:4 = best quality, 4:2:0 = best compression")
-        jpeg_layout.addWidget(self.jpeg_subsampling, 1, 1)
-
-        # Optimize
-        jpeg_layout.addWidget(QLabel("Optimize:"), 2, 0)
-        self.jpeg_optimize = QCheckBox()
-        self.jpeg_optimize.setChecked(JPEG_DEFAULTS["optimize"])
-        self.jpeg_optimize.setToolTip("Huffman optimization for better compression")
-        jpeg_layout.addWidget(self.jpeg_optimize, 2, 1)
-
-        # Smooth
-        jpeg_layout.addWidget(QLabel("Smooth:"), 3, 0)
-        self.jpeg_smooth = QSpinBox()
-        self.jpeg_smooth.setRange(0, 100)
-        self.jpeg_smooth.setValue(JPEG_DEFAULTS["smooth"])
-        self.jpeg_smooth.setToolTip("Light smoothing (0-100). Reduces noise for better compression")
-        jpeg_layout.addWidget(self.jpeg_smooth, 3, 1)
-
-        # Keep RGB
-        jpeg_layout.addWidget(QLabel("Keep RGB:"), 4, 0)
-        self.jpeg_keep_rgb = QCheckBox()
-        self.jpeg_keep_rgb.setChecked(JPEG_DEFAULTS["keep_rgb"])
-        self.jpeg_keep_rgb.setToolTip("Save in RGB instead of YCbCr. May increase size but removes color transitions")
-        jpeg_layout.addWidget(self.jpeg_keep_rgb, 4, 1)
-
-        self.advanced_box.add_widget(self.jpeg_group)
-        return {
-            "progressive": self.jpeg_progressive,
-            "subsampling": self.jpeg_subsampling,
-            "optimize": self.jpeg_optimize,
-            "smooth": self.jpeg_smooth,
-            "keep_rgb": self.jpeg_keep_rgb,
-        }
-
-    def _setup_advanced_for_webp(self) -> dict:
-        # WebP Settings
-        self.webp_group = QGroupBox("WebP Advanced Settings")
-        self.webp_group.setVisible(False)
-        webp_layout = QGridLayout(self.webp_group)
-
-        # Lossless
-        webp_layout.addWidget(QLabel("Lossless:"), 0, 0)
-        self.webp_lossless = QCheckBox()
-        self.webp_lossless.setChecked(WEBP_DEFAULTS["lossless"])
-        self.webp_lossless.setToolTip("Lossless compression. Radically changes compression method")
-        webp_layout.addWidget(self.webp_lossless, 0, 1)
-
-        # Method
-        webp_layout.addWidget(QLabel("Method:"), 1, 0)
-        self.webp_method = QSpinBox()
-        self.webp_method.setRange(0, 6)
-        self.webp_method.setValue(WEBP_DEFAULTS["method"])
-        self.webp_method.setToolTip("Compression method (0-6). Slower = better compression at same quality")
-        webp_layout.addWidget(self.webp_method, 1, 1)
-
-        # Alpha Quality
-        webp_layout.addWidget(QLabel("Alpha Quality:"), 2, 0)
-        self.webp_alpha_quality = QSpinBox()
-        self.webp_alpha_quality.setRange(0, 100)
-        self.webp_alpha_quality.setValue(WEBP_DEFAULTS["alpha_quality"])
-        self.webp_alpha_quality.setToolTip("Quality of alpha channel in lossy mode")
-        webp_layout.addWidget(self.webp_alpha_quality, 2, 1)
-
-        # Exact
-        webp_layout.addWidget(QLabel("Exact:"), 3, 0)
-        self.webp_exact = QCheckBox()
-        self.webp_exact.setChecked(WEBP_DEFAULTS["exact"])
-        self.webp_exact.setToolTip("Save RGB under transparency. Increases size but improves quality")
-        webp_layout.addWidget(self.webp_exact, 3, 1)
-        self.advanced_box.add_widget(self.webp_group)
-
-        return {
-            "lossless": self.webp_lossless,
-            "method": self.webp_method,
-            "alpha_quality": self.webp_alpha_quality,
-            "exact": self.webp_exact,
-        }
-
-    def _setup_advanced_for_avif(self) -> dict:
-        # AVIF Settings
-        self.avif_group = QGroupBox("AVIF Advanced Settings")
-        self.avif_group.setVisible(False)
-        avif_layout = QGridLayout(self.avif_group)
-
-        # Subsampling
-        avif_layout.addWidget(QLabel("Subsampling:"), 0, 0)
-        self.avif_subsampling = QComboBox()
-        self.avif_subsampling.addItems(["4:2:0", "4:2:2", "4:4:4", "4:0:0"])
-        self.avif_subsampling.setCurrentText(AVIF_DEFAULTS["subsampling"])
-        self.avif_subsampling.setToolTip("Color subsampling. 4:4:4 = best quality, 4:2:0 = best compression")
-        avif_layout.addWidget(self.avif_subsampling, 0, 1)
-
-        # Speed
-        avif_layout.addWidget(QLabel("Speed:"), 1, 0)
-        self.avif_speed = QSpinBox()
-        self.avif_speed.setRange(0, 10)
-        self.avif_speed.setValue(AVIF_DEFAULTS["speed"])
-        self.avif_speed.setToolTip("Encoding speed (0-10). 0 = slower/better, 10 = faster/worse")
-        avif_layout.addWidget(self.avif_speed, 1, 1)
-
-        # Codec
-        avif_layout.addWidget(QLabel("Codec:"), 2, 0)
-        self.avif_codec = QComboBox()
-        self.avif_codec.addItems(["auto", "aom", "rav1e", "svt"])
-        self.avif_codec.setCurrentText(AVIF_DEFAULTS["codec"])
-        self.avif_codec.setToolTip("AV1 encoder to use (if available)")
-        avif_layout.addWidget(self.avif_codec, 2, 1)
-
-        # Range
-        avif_layout.addWidget(QLabel("Range:"), 3, 0)
-        self.avif_range = QComboBox()
-        self.avif_range.addItems(["full", "limited"])
-        self.avif_range.setCurrentText(AVIF_DEFAULTS["range"])
-        self.avif_range.setToolTip("Tonal range")
-        avif_layout.addWidget(self.avif_range, 3, 1)
-
-        # QMin
-        avif_layout.addWidget(QLabel("QMin:"), 4, 0)
-        self.avif_qmin = QSpinBox()
-        self.avif_qmin.setRange(-1, 63)
-        self.avif_qmin.setValue(AVIF_DEFAULTS["qmin"])
-        self.avif_qmin.setToolTip("Minimum quantizer (-1 = auto, 0-63 = hard lower bound)")
-        avif_layout.addWidget(self.avif_qmin, 4, 1)
-
-        # QMax
-        avif_layout.addWidget(QLabel("QMax:"), 5, 0)
-        self.avif_qmax = QSpinBox()
-        self.avif_qmax.setRange(-1, 63)
-        self.avif_qmax.setValue(AVIF_DEFAULTS["qmax"])
-        self.avif_qmax.setToolTip("Maximum quantizer (-1 = auto, 0-63 = upper bound)")
-        avif_layout.addWidget(self.avif_qmax, 5, 1)
-
-        # Auto Tiling
-        avif_layout.addWidget(QLabel("Auto Tiling:"), 6, 0)
-        self.avif_autotiling = QCheckBox()
-        self.avif_autotiling.setChecked(AVIF_DEFAULTS["autotiling"])
-        self.avif_autotiling.setToolTip("Automatic tiling for better decoding speed")
-        avif_layout.addWidget(self.avif_autotiling, 6, 1)
-
-        # Tile Rows
-        avif_layout.addWidget(QLabel("Tile Rows (log2):"), 7, 0)
-        self.avif_tile_rows = QSpinBox()
-        self.avif_tile_rows.setRange(0, 6)
-        self.avif_tile_rows.setValue(AVIF_DEFAULTS["tile_rows"])
-        self.avif_tile_rows.setToolTip("Explicit tile rows (if auto tiling = false)")
-        avif_layout.addWidget(self.avif_tile_rows, 7, 1)
-
-        # Tile Cols
-        avif_layout.addWidget(QLabel("Tile Cols (log2):"), 8, 0)
-        self.avif_tile_cols = QSpinBox()
-        self.avif_tile_cols.setRange(0, 6)
-        self.avif_tile_cols.setValue(AVIF_DEFAULTS["tile_cols"])
-        self.avif_tile_cols.setToolTip("Explicit tile columns (if auto tiling = false)")
-        avif_layout.addWidget(self.avif_tile_cols, 8, 1)
-        self.advanced_box.add_widget(self.avif_group)
-
-        return {
-            "subsampling": self.avif_subsampling,
-            "speed": self.avif_speed,
-            "codec": self.avif_codec,
-            "range": self.avif_range,
-            "qmin": self.avif_qmin,
-            "qmax": self.avif_qmax,
-            "autotiling": self.avif_autotiling,
-            "tile_rows": self.avif_tile_rows,
-            "tile_cols": self.avif_tile_cols,
-        }
-
-    def update_format_specific_settings(self) -> None:
-        """Update visibility of format-specific settings based on selected format."""
-        format_name = self.format_combo.currentText().lower()
-
-        # Hide all groups first
-        self.jpeg_group.setVisible(False)
-        self.webp_group.setVisible(False)
-        self.avif_group.setVisible(False)
-
-        # Show only the relevant group
-        if format_name == "jpeg":
-            self.jpeg_group.setVisible(True)
-        elif format_name == "webp":
-            self.webp_group.setVisible(True)
-        elif format_name == "avif":
-            self.avif_group.setVisible(True)
-
     def setup_connections(self) -> None:
         """Set up signal connections."""
         self.select_input_btn.clicked.connect(self.select_input_directory)
@@ -711,7 +427,6 @@ class MainWindow(QMainWindow):
         self.compress_btn.clicked.connect(self.start_compression)
         self.compare_btn.clicked.connect(self.show_comparison)
         self.reset_btn.clicked.connect(self.reset_settings)
-        self.format_combo.currentTextChanged.connect(self.update_format_specific_settings)
 
     def select_input_directory(self) -> None:
         """Select input directory for compression."""
@@ -731,43 +446,8 @@ class MainWindow(QMainWindow):
 
     def reset_settings(self) -> None:
         """Reset all compression settings to their default values."""
-        # Basic settings
-        self.quality_spinbox.setValue(BASIC_DEFAULTS["quality"])
-        self.max_largest_checkbox.setChecked(BASIC_DEFAULTS["max_largest_enabled"])
-        self.max_largest_spinbox.setValue(BASIC_DEFAULTS["max_largest_side"])
-        self.max_largest_spinbox.setEnabled(BASIC_DEFAULTS["max_largest_enabled"])
-        self.max_smallest_checkbox.setChecked(BASIC_DEFAULTS["max_smallest_enabled"])
-        self.max_smallest_spinbox.setValue(BASIC_DEFAULTS["max_smallest_side"])
-        self.max_smallest_spinbox.setEnabled(BASIC_DEFAULTS["max_smallest_enabled"])
-        self.format_combo.setCurrentText(BASIC_DEFAULTS["output_format"])
-        self.preserve_structure_checkbox.setChecked(BASIC_DEFAULTS["preserve_structure"])
-
-        # JPEG specific
-        self.jpeg_progressive.setChecked(JPEG_DEFAULTS["progressive"])
-        self.jpeg_subsampling.setCurrentText(JPEG_DEFAULTS["subsampling"])
-        self.jpeg_optimize.setChecked(JPEG_DEFAULTS["optimize"])
-        self.jpeg_smooth.setValue(JPEG_DEFAULTS["smooth"])
-        self.jpeg_keep_rgb.setChecked(JPEG_DEFAULTS["keep_rgb"])
-
-        # WebP specific
-        self.webp_lossless.setChecked(WEBP_DEFAULTS["lossless"])
-        self.webp_method.setValue(WEBP_DEFAULTS["method"])
-        self.webp_alpha_quality.setValue(WEBP_DEFAULTS["alpha_quality"])
-        self.webp_exact.setChecked(WEBP_DEFAULTS["exact"])
-
-        # AVIF specific
-        self.avif_subsampling.setCurrentText(AVIF_DEFAULTS["subsampling"])
-        self.avif_speed.setValue(AVIF_DEFAULTS["speed"])
-        self.avif_codec.setCurrentText(AVIF_DEFAULTS["codec"])
-        self.avif_range.setCurrentText(AVIF_DEFAULTS["range"])
-        self.avif_qmin.setValue(AVIF_DEFAULTS["qmin"])
-        self.avif_qmax.setValue(AVIF_DEFAULTS["qmax"])
-        self.avif_autotiling.setChecked(AVIF_DEFAULTS["autotiling"])
-        self.avif_tile_rows.setValue(AVIF_DEFAULTS["tile_rows"])
-        self.avif_tile_cols.setValue(AVIF_DEFAULTS["tile_cols"])
-
-        # Update UI state
-        self.update_format_specific_settings()
+        for panel in self.profile_panels:
+            panel.reset_to_defaults()
         self.log_message("Compression settings reset to defaults")
 
     def select_output_directory(self) -> None:
@@ -786,181 +466,28 @@ class MainWindow(QMainWindow):
         """Update stored output directory when text changes."""
         self.output_directory = Path(text) if text else None
 
+    def add_profile_panel(self, profile: CompressionProfile | None = None) -> None:
+        panel = ProfilePanel(f"Profile {len(self.profile_panels) + 1}")
+        self.profile_panels.append(panel)
+        self.profiles_layout.addWidget(panel)
+        if profile:
+            panel.apply_profile(profile)
+
     def get_compression_parameters(self) -> dict[str, Any]:
-        """Get all compression parameters from UI."""
-        format_name = self.format_combo.currentText().lower()
-
-        # Ensure output directory reflects current text
-        if self.output_dir_edit.text():
-            self.output_directory = Path(self.output_dir_edit.text())
-
-        # Basic parameters
-        params = {
-            "quality": self.quality_spinbox.value(),
-            "max_largest_side": self.max_largest_spinbox.value() if self.max_largest_checkbox.isChecked() else None,
-            "max_smallest_side": self.max_smallest_spinbox.value() if self.max_smallest_checkbox.isChecked() else None,
-            "preserve_structure": self.preserve_structure_checkbox.isChecked(),
-            "output_format": self.format_combo.currentText(),
-            "input_directory": str(self.input_directory),
-            "output_directory": str(self.output_directory),
-        }
-
-        # Format-specific parameters
-        if format_name == "jpeg":
-            params.update(
-                {
-                    "progressive": self.jpeg_progressive.isChecked(),
-                    "subsampling": self._get_jpeg_subsampling_value(),
-                    "optimize": self.jpeg_optimize.isChecked(),
-                    "smooth": self.jpeg_smooth.value(),
-                    "keep_rgb": self.jpeg_keep_rgb.isChecked(),
-                }
-            )
-        elif format_name == "webp":
-            params.update(
-                {
-                    "lossless": self.webp_lossless.isChecked(),
-                    "method": self.webp_method.value(),
-                    "alpha_quality": self.webp_alpha_quality.value(),
-                    "exact": self.webp_exact.isChecked(),
-                }
-            )
-        elif format_name == "avif":
-            params.update(
-                {
-                    "subsampling": self.avif_subsampling.currentText(),
-                    "speed": self.avif_speed.value(),
-                    "codec": self.avif_codec.currentText(),
-                    "range": self.avif_range.currentText(),
-                    "qmin": self.avif_qmin.value(),
-                    "qmax": self.avif_qmax.value(),
-                    "autotiling": self.avif_autotiling.isChecked(),
-                    "tile_rows": self.avif_tile_rows.value(),
-                    "tile_cols": self.avif_tile_cols.value(),
-                }
-            )
-
+        if not self.profile_panels:
+            return {}
+        params = self.profile_panels[0].get_parameters()
+        params["input_directory"] = str(self.input_directory)
+        params["output_directory"] = str(self.output_directory)
         return params
 
-    def _get_jpeg_subsampling_value(self) -> int | str:
-        """Convert JPEG subsampling combo text to actual value."""
-        text = self.jpeg_subsampling.currentText()
-        if "4:4:4" in text:
-            return 0
-        if "4:2:2" in text:
-            return 1
-        if "4:2:0" in text:
-            return 2
-        return -1  # Auto
-
-    def _set_jpeg_subsampling_value(self, value: int | str) -> None:
-        mapping = {
-            -1: "Auto (-1)",
-            0: "4:4:4 (0)",
-            1: "4:2:2 (1)",
-            2: "4:2:0 (2)",
-        }
-        key = int(value) if isinstance(value, str) else value
-        self.jpeg_subsampling.setCurrentText(mapping.get(key, "Auto (-1)"))
-
-    def _build_profile_from_params(self, name: str, params: dict[str, Any]) -> CompressionProfile:
-        format_name = params["output_format"].lower()
-        profile = CompressionProfile(
-            name=name,
-            quality=params["quality"],
-            max_largest_side=params["max_largest_side"],
-            max_smallest_side=params["max_smallest_side"],
-            output_format=params["output_format"],
-            preserve_structure=params["preserve_structure"],
-        )
-        if format_name == "jpeg":
-            profile.jpeg_params = {
-                "progressive": params.get("progressive", False),
-                "subsampling": params.get("subsampling", -1),
-                "optimize": params.get("optimize", False),
-                "smooth": params.get("smooth", 0),
-                "keep_rgb": params.get("keep_rgb", False),
-            }
-        elif format_name == "webp":
-            profile.webp_params = {
-                "lossless": params.get("lossless", False),
-                "method": params.get("method", 4),
-                "alpha_quality": params.get("alpha_quality", 100),
-                "exact": params.get("exact", False),
-            }
-        elif format_name == "avif":
-            profile.avif_params = {
-                "subsampling": params.get("subsampling", "4:2:0"),
-                "speed": params.get("speed", 6),
-                "codec": params.get("codec", "auto"),
-                "range": params.get("range", "full"),
-                "qmin": params.get("qmin", -1),
-                "qmax": params.get("qmax", -1),
-                "autotiling": params.get("autotiling", True),
-                "tile_rows": params.get("tile_rows", 0),
-                "tile_cols": params.get("tile_cols", 0),
-            }
-        return profile
-
-    def apply_profile(self, profile: CompressionProfile) -> None:
-        self.quality_spinbox.setValue(profile.quality)
-
-        if profile.max_largest_side is not None:
-            self.max_largest_checkbox.setChecked(True)
-            self.max_largest_spinbox.setValue(profile.max_largest_side)
-        else:
-            self.max_largest_checkbox.setChecked(False)
-        self.max_largest_spinbox.setEnabled(profile.max_largest_side is not None)
-
-        if profile.max_smallest_side is not None:
-            self.max_smallest_checkbox.setChecked(True)
-            self.max_smallest_spinbox.setValue(profile.max_smallest_side)
-        else:
-            self.max_smallest_checkbox.setChecked(False)
-        self.max_smallest_spinbox.setEnabled(profile.max_smallest_side is not None)
-
-        self.format_combo.setCurrentText(profile.output_format)
-        self.preserve_structure_checkbox.setChecked(profile.preserve_structure)
-
-        fmt = profile.output_format.lower()
-        if fmt == "jpeg":
-            p = profile.jpeg_params
-            self.jpeg_progressive.setChecked(p.get("progressive", False))
-            self._set_jpeg_subsampling_value(p.get("subsampling", -1))
-            self.jpeg_optimize.setChecked(p.get("optimize", False))
-            self.jpeg_smooth.setValue(p.get("smooth", 0))
-            self.jpeg_keep_rgb.setChecked(p.get("keep_rgb", False))
-        elif fmt == "webp":
-            p = profile.webp_params
-            self.webp_lossless.setChecked(p.get("lossless", False))
-            self.webp_method.setValue(p.get("method", 4))
-            self.webp_alpha_quality.setValue(p.get("alpha_quality", 100))
-            self.webp_exact.setChecked(p.get("exact", False))
-        elif fmt == "avif":
-            p = profile.avif_params
-            self.avif_subsampling.setCurrentText(p.get("subsampling", "4:2:0"))
-            self.avif_speed.setValue(p.get("speed", 6))
-            self.avif_codec.setCurrentText(p.get("codec", "auto"))
-            self.avif_range.setCurrentText(p.get("range", "full"))
-            self.avif_qmin.setValue(p.get("qmin", -1))
-            self.avif_qmax.setValue(p.get("qmax", -1))
-            self.avif_autotiling.setChecked(p.get("autotiling", True))
-            self.avif_tile_rows.setValue(p.get("tile_rows", 0))
-            self.avif_tile_cols.setValue(p.get("tile_cols", 0))
-
-        self.update_format_specific_settings()
-
     def save_profiles(self) -> None:
-        params = self.get_compression_parameters()
-        name, ok = QInputDialog.getText(self, "Save Profile", "Profile name:")
-        if not ok or not name:
-            return
-        profile = self._build_profile_from_params(name, params)
         file_name, _ = QFileDialog.getSaveFileName(self, "Save Profiles", "profiles.json", "JSON Files (*.json)")
         if not file_name:
             return
-        save_profiles([profile], Path(file_name))
-        self.log_message(f"Profile '{name}' saved to {file_name}")
+        profiles = [panel.to_profile() for panel in self.profile_panels]
+        save_profiles(profiles, Path(file_name))
+        self.log_message(f"Saved {len(profiles)} profiles to {file_name}")
 
     def load_profiles(self) -> None:
         file_name, _ = QFileDialog.getOpenFileName(self, "Load Profiles", "", "JSON Files (*.json)")
@@ -970,13 +497,12 @@ class MainWindow(QMainWindow):
         if not profiles:
             QMessageBox.warning(self, "Warning", "No profiles found in file.")
             return
-        names = [p.name for p in profiles]
-        name, ok = QInputDialog.getItem(self, "Select Profile", "Profile:", names, 0, False)
-        if not ok:
-            return
-        profile = next(p for p in profiles if p.name == name)
-        self.apply_profile(profile)
-        self.log_message(f"Profile '{name}' loaded from {file_name}")
+        for panel in self.profile_panels:
+            panel.setParent(None)
+        self.profile_panels.clear()
+        for profile in profiles:
+            self.add_profile_panel(profile)
+        self.log_message(f"Loaded {len(profiles)} profiles from {file_name}")
 
     def start_compression(self) -> None:
         """Start the compression process."""
@@ -1005,36 +531,6 @@ class MainWindow(QMainWindow):
             preserve_structure=compression_params["preserve_structure"],
             output_format=compression_params["output_format"],
         )
-
-        # Set format-specific parameters
-        format_name = compression_params["output_format"].lower()
-        if format_name == "jpeg":
-            compressor.set_jpeg_parameters(
-                progressive=compression_params.get("progressive", False),
-                subsampling=compression_params.get("subsampling", -1),
-                optimize=compression_params.get("optimize", False),
-                smooth=compression_params.get("smooth", 0),
-                keep_rgb=compression_params.get("keep_rgb", False),
-            )
-        elif format_name == "webp":
-            compressor.set_webp_parameters(
-                lossless=compression_params.get("lossless", False),
-                method=compression_params.get("method", 4),
-                alpha_quality=compression_params.get("alpha_quality", 100),
-                exact=compression_params.get("exact", False),
-            )
-        elif format_name == "avif":
-            compressor.set_avif_parameters(
-                subsampling=compression_params.get("subsampling", "4:2:0"),
-                speed=compression_params.get("speed", 6),
-                codec=compression_params.get("codec", "auto"),
-                range=compression_params.get("range", "full"),
-                qmin=compression_params.get("qmin", -1),
-                qmax=compression_params.get("qmax", -1),
-                autotiling=compression_params.get("autotiling", True),
-                tile_rows=compression_params.get("tile_rows", 0),
-                tile_cols=compression_params.get("tile_cols", 0),
-            )
 
         # Store all parameters for the worker
         compression_settings = compression_params.copy()
