@@ -45,7 +45,7 @@ from service.image_compression import (
     save_compression_settings,
 )
 from service.profile_panel import ProfilePanel
-from service.translator import LANGUAGES, set_language, tr
+from service.translator import LANGUAGES, get_language, set_language, tr
 
 
 class CompressionWorker(QThread):
@@ -180,6 +180,11 @@ class MainWindow(QMainWindow):
         self.language_combo = QComboBox()
         for code, name in LANGUAGES.items():
             self.language_combo.addItem(name, code)
+        # Select system language by default
+        current_code = get_language()
+        index = self.language_combo.findData(current_code)
+        if index != -1:
+            self.language_combo.setCurrentIndex(index)
         lang_layout.addWidget(self.lang_label)
         lang_layout.addWidget(self.language_combo)
         main_layout.addLayout(lang_layout)
@@ -251,14 +256,6 @@ class MainWindow(QMainWindow):
                 background-color: #005a9e;
             }
         """)
-
-        # Ensure directory selection buttons have the same width
-        button_width = max(
-            self.select_input_btn.sizeHint().width(),
-            self.select_output_btn.sizeHint().width(),
-        )
-        self.select_input_btn.setFixedWidth(button_width)
-        self.select_output_btn.setFixedWidth(button_width)
 
         output_dir_layout.addWidget(self.output_dir_edit, 1)
         output_dir_layout.addWidget(self.regen_output_btn)
@@ -429,6 +426,15 @@ class MainWindow(QMainWindow):
             if hasattr(panel, "update_translations"):
                 panel.update_translations()
 
+    def update_button_widths(self) -> None:
+        """Ensure directory selection buttons share the same width."""
+        button_width = max(
+            self.select_input_btn.sizeHint().width(),
+            self.select_output_btn.sizeHint().width(),
+        )
+        self.select_input_btn.setFixedWidth(button_width)
+        self.select_output_btn.setFixedWidth(button_width)
+
     def update_translations(self) -> None:
         """Update UI text for the selected language."""
         self.setWindowTitle(tr("Image Compression Tool"))
@@ -451,6 +457,7 @@ class MainWindow(QMainWindow):
         self.compare_btn.setText(tr("Compare Images"))
         self.log_group.setTitle(tr("Log"))
         self.lang_label.setText(tr("Language:"))
+        self.update_button_widths()
 
     def select_input_directory(self) -> None:
         """Select input directory for compression."""
@@ -464,7 +471,7 @@ class MainWindow(QMainWindow):
             self.output_directory = self.generate_output_directory()
             self.output_dir_edit.setText(str(self.output_directory))
             self.compress_btn.setEnabled(True)
-            self.log_message(f"Selected input directory: {self.input_directory}")
+            self.log_message(tr("Selected input directory: {path}").format(path=self.input_directory))
             self.compare_btn.setEnabled(True)
 
     def reset_settings(self) -> None:
@@ -473,7 +480,7 @@ class MainWindow(QMainWindow):
             panel.setParent(None)
         self.profile_panels.clear()
         self.add_profile_panel()
-        self.log_message("Compression settings reset to defaults")
+        self.log_message(tr("Compression settings reset to defaults"))
 
     def select_output_directory(self) -> None:
         """Select output directory for compression results."""
@@ -485,7 +492,7 @@ class MainWindow(QMainWindow):
         if directory:
             self.output_directory = Path(directory)
             self.output_dir_edit.setText(str(self.output_directory))
-            self.log_message(f"Selected output directory: {self.output_directory}")
+            self.log_message(tr("Selected output directory: {path}").format(path=self.output_directory))
 
     def update_output_directory_from_text(self, text: str) -> None:
         """Update stored output directory when text changes."""
@@ -507,7 +514,7 @@ class MainWindow(QMainWindow):
             return
         self.output_directory = self.generate_output_directory()
         self.output_dir_edit.setText(str(self.output_directory))
-        self.log_message(f"Regenerated output directory: {self.output_directory}")
+        self.log_message(tr("Regenerated output directory: {path}").format(path=self.output_directory))
 
     def add_profile_panel(self, profile: CompressionProfile | None = None) -> None:
         allow_conditions = len(self.profile_panels) > 0
@@ -527,7 +534,7 @@ class MainWindow(QMainWindow):
             return
         profiles = [panel.to_profile() for panel in self.profile_panels]
         save_profiles(profiles, Path(file_name))
-        self.log_message(f"Saved {len(profiles)} profiles to {file_name}")
+        self.log_message(tr("Saved {count} profiles to {file}").format(count=len(profiles), file=file_name))
 
     def load_profiles(self) -> None:
         file_name, _ = QFileDialog.getOpenFileName(self, tr("Load Profiles"), "", "JSON Files (*.json)")
@@ -542,7 +549,7 @@ class MainWindow(QMainWindow):
         self.profile_panels.clear()
         for profile in profiles:
             self.add_profile_panel(profile)
-        self.log_message(f"Loaded {len(profiles)} profiles from {file_name}")
+        self.log_message(tr("Loaded {count} profiles from {file}").format(count=len(profiles), file=file_name))
 
     def remove_profile_panel(self, panel: ProfilePanel) -> None:
         if panel in self.profile_panels:
@@ -614,7 +621,7 @@ class MainWindow(QMainWindow):
 
         # Start compression
         self.compression_worker.start()
-        self.log_message("Starting compression process...")
+        self.log_message(tr("Starting compression process..."))
 
     def update_progress(self, current: int, total: int) -> None:
         """Update progress bar."""
@@ -648,7 +655,7 @@ Statistics:
 Output directory: {self.output_directory}
         """
 
-        self.log_message("Compression completed successfully!")
+        self.log_message(tr("Compression completed successfully!"))
         QMessageBox.information(self, tr("Compression Complete"), message)
 
         # Update status
@@ -660,7 +667,7 @@ Output directory: {self.output_directory}
         self.compare_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         self.status_label.setText(tr("Compression failed"))
-        self.log_message(f"ERROR: {error_message}")
+        self.log_message(tr("Error: {error}").format(error=error_message))
         QMessageBox.critical(
             self,
             tr("Compression Error"),
@@ -682,10 +689,10 @@ Output directory: {self.output_directory}
                 else:
                     self.comparison_window.load_directories_from_paths(self.output_directory, self.input_directory)
 
-            self.log_message("Opened comparison window")
+            self.log_message(tr("Opened comparison window"))
 
         except Exception as e:
-            self.log_message(f"Error opening comparison: {e}")
+            self.log_message(tr("Error opening comparison: {error}").format(error=e))
             QMessageBox.critical(
                 self,
                 tr("Error"),

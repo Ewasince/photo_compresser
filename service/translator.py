@@ -1,7 +1,6 @@
-from __future__ import annotations
-
 """Simple runtime translation support."""
 
+import locale
 
 LANGUAGES: dict[str, str] = {
     "en": "English",
@@ -47,10 +46,80 @@ _translations: dict[str, dict[str, str]] = {
         "An error occurred during compression:\n\n{error}": "Произошла ошибка во время сжатия:\n\n{error}",
         "Error": "Ошибка",
         "Failed to open comparison window:\n\n{error}": "Не удалось открыть окно сравнения:\n\n{error}",
+        "Selected input directory: {path}": "Выбрана папка источника: {path}",
+        "Compression settings reset to defaults": "Настройки сжатия сброшены по умолчанию",
+        "Selected output directory: {path}": "Выбрана папка вывода: {path}",
+        "Regenerated output directory: {path}": "Сгенерирована выходная папка: {path}",
+        "Saved {count} profiles to {file}": "Сохранено {count} профилей в {file}",
+        "Loaded {count} profiles from {file}": "Загружено {count} профилей из {file}",
+        "Starting compression process...": "Запуск процесса сжатия...",
+        "Error: {error}": "Ошибка: {error}",
+        "Opened comparison window": "Открыто окно сравнения",
+        "Error opening comparison: {error}": "Ошибка открытия окна сравнения: {error}",
+        "Loading Previews": "Загрузка превью",
+        "Generating previews: {current}/{total}": "Создание превью: {current}/{total}",
+        "Image Comparison Viewer": "Просмотр сравнения изображений",
+        "Load Config": "Загрузить конфиг",
+        "Load Image Pair": "Загрузить пару изображений",
+        "Load Directories": "Загрузить папки",
+        "Reset View": "Сбросить вид",
+        "Compare Stats": "Сравнить статистику",
+        "No images loaded": "Изображения не загружены",
+        "Select First Image": "Выберите первое изображение",
+        "Select Second Image": "Выберите второе изображение",
+        "Select Config": "Выберите конфиг",
+        "Select First Directory": "Выберите первую папку",
+        "Select Second Directory": "Выберите вторую папку",
+        "Showing: {name} ({index}/{total})": "Показ: {name} ({index}/{total})",
+        "Loaded {count} image pairs": "Загружено {count} пар изображений",
+        "Compression Statistics": "Статистика сжатия",
+        "Metric": "Метрика",
+        "Directory 1": "Папка 1",
+        "Directory 2": "Папка 2",
+        "Difference": "Разница",
+        "Different": "Различаются",
+        "Output Format": "Формат вывода",
+        "Quality": "Качество",
+        "Progressive": "Прогрессивный",
+        "Subsampling": "Субдискретизация",
+        "Optimize": "Оптимизация",
+        "Smooth": "Сглаживание",
+        "Keep RGB": "Сохранить RGB",
+        "Lossless": "Без потерь",
+        "Method": "Метод",
+        "Alpha Quality": "Качество альфа",
+        "Exact": "Точный",
+        "Speed": "Скорость",
+        "Codec": "Кодек",
+        "Range": "Диапазон",
+        "Qmin": "Qmin",
+        "Qmax": "Qmax",
+        "Autotiling": "Авторазбиение",
+        "Tile Rows": "Ряды тайлов",
+        "Tile Cols": "Колонки тайлов",
+        "Input Size": "Входной размер",
+        "Output Size": "Выходной размер",
+        "Space Saved": "Экономия места",
+        "Compression Ratio": "Коэффициент сжатия",
+        "Total Files": "Всего файлов",
+        "Files Compressed": "Файлов сжато",
+        "Failed Files": "Ошибок",
+        "Conversion Time": "Время преобразования",
     }
 }
 
-_current_language = "en"
+
+def _detect_system_language() -> str:
+    """Return a language code based on system locale."""
+    language, _ = locale.getlocale()
+    if language:
+        code = language.split("_")[0].lower()
+        if code in LANGUAGES:
+            return code
+    return "en"
+
+
+_current_language = _detect_system_language()
 
 
 def set_language(code: str) -> None:

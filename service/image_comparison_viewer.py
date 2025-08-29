@@ -50,6 +50,7 @@ from PySide6.QtWidgets import (
 from service.constants import SUPPORTED_EXTENSIONS
 from service.file_utils import format_timedelta
 from service.image_pair import ImagePair
+from service.translator import tr
 
 BUTTON_STYLE = """
     QPushButton {
@@ -78,7 +79,7 @@ class LoadingDialog(QDialog):
 
     def __init__(self, total: int, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Loading Previews")
+        self.setWindowTitle(tr("Loading Previews"))
         self.setModal(True)
 
         layout = QVBoxLayout(self)
@@ -94,7 +95,9 @@ class LoadingDialog(QDialog):
         """Update displayed progress."""
 
         self.progress.setValue(current)
-        self.label.setText(f"Generating previews: {current}/{self.progress.maximum()}")
+        self.label.setText(
+            tr("Generating previews: {current}/{total}").format(current=current, total=self.progress.maximum())
+        )
 
 
 class ThumbnailObserver(QObject):
@@ -667,13 +670,13 @@ class CompressionStatsDialog(QDialog):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Compression Statistics")
+        self.setWindowTitle(tr("Compression Statistics"))
         layout = QGridLayout(self)
 
-        layout.addWidget(QLabel("Metric"), 0, 0)
-        layout.addWidget(QLabel("Directory 1"), 0, 1)
-        layout.addWidget(QLabel("Directory 2"), 0, 2)
-        layout.addWidget(QLabel("Difference"), 0, 3)
+        layout.addWidget(QLabel(tr("Metric")), 0, 0)
+        layout.addWidget(QLabel(tr("Directory 1")), 0, 1)
+        layout.addWidget(QLabel(tr("Directory 2")), 0, 2)
+        layout.addWidget(QLabel(tr("Difference")), 0, 3)
 
         param_label_map = {
             "output_format": "Output Format",
@@ -711,7 +714,7 @@ class CompressionStatsDialog(QDialog):
                     return f"{diff:.2f}%" if not diff.is_integer() else f"{int(diff)}%"
                 return f"{diff:.2f}" if not diff.is_integer() else str(int(diff))
             if val1 != val2:
-                return "Different"
+                return tr("Different")
             return ""
 
         fmt1 = str(settings1.get("output_format", "")).lower()
@@ -723,7 +726,7 @@ class CompressionStatsDialog(QDialog):
             nonlocal row
             val1 = settings1.get(key, "")
             val2 = settings2.get(key, "")
-            metric_label = QLabel(param_label_map.get(key, key))
+            metric_label = QLabel(tr(param_label_map.get(key, key)))
             val1_label = QLabel(format_param_value(key, val1))
             val2_label = QLabel(format_param_value(key, val2))
             diff_label = QLabel(diff_param_value(key, val1, val2))
@@ -809,7 +812,7 @@ class CompressionStatsDialog(QDialog):
 
         keys = sorted(set(stats1.keys()) | set(stats2.keys()))
         for key in keys:
-            layout.addWidget(QLabel(label_map.get(key, key)), row, 0)
+            layout.addWidget(QLabel(tr(label_map.get(key, key))), row, 0)
             val1 = stats1.get(key, "")
             val2 = stats2.get(key, "")
             label1 = QLabel(format_value(key, val1))
@@ -879,7 +882,7 @@ class MainWindow(QMainWindow):
         self.setup_connections()
 
         # Set window properties
-        self.setWindowTitle("Image Comparison Viewer")
+        self.setWindowTitle(tr("Image Comparison Viewer"))
         self.setGeometry(100, 100, 1200, 800)
         self.setStyleSheet("""
             QMainWindow {
@@ -901,19 +904,19 @@ class MainWindow(QMainWindow):
         # Top controls
         controls_layout = QHBoxLayout()
 
-        self.load_config_button = QPushButton("Load Config")
+        self.load_config_button = QPushButton(tr("Load Config"))
         self.load_config_button.setStyleSheet(BUTTON_STYLE)
 
-        self.load_button = QPushButton("Load Image Pair")
+        self.load_button = QPushButton(tr("Load Image Pair"))
         self.load_button.setStyleSheet(BUTTON_STYLE)
 
-        self.load_dirs_button = QPushButton("Load Directories")
+        self.load_dirs_button = QPushButton(tr("Load Directories"))
         self.load_dirs_button.setStyleSheet(BUTTON_STYLE)
 
-        self.reset_button = QPushButton("Reset View")
+        self.reset_button = QPushButton(tr("Reset View"))
         self.reset_button.setStyleSheet(BUTTON_STYLE)
 
-        self.stats_button = QPushButton("Compare Stats")
+        self.stats_button = QPushButton(tr("Compare Stats"))
         self.stats_button.setEnabled(False)
         self.stats_button.setStyleSheet(BUTTON_STYLE)
 
@@ -925,7 +928,7 @@ class MainWindow(QMainWindow):
         controls_layout.addStretch()
 
         # Status label
-        self.status_label = QLabel("No images loaded")
+        self.status_label = QLabel(tr("No images loaded"))
         self.status_label.setStyleSheet("color: #ccc; font-size: 12px;")
         controls_layout.addWidget(self.status_label)
 
@@ -953,7 +956,7 @@ class MainWindow(QMainWindow):
         # Load first image
         file1, _ = QFileDialog.getOpenFileName(
             self,
-            "Select First Image",
+            tr("Select First Image"),
             "",
             FORMATS_PATTERN,
         )
@@ -964,7 +967,7 @@ class MainWindow(QMainWindow):
         # Load second image
         file2, _ = QFileDialog.getOpenFileName(
             self,
-            "Select Second Image",
+            tr("Select Second Image"),
             "",
             FORMATS_PATTERN,
         )
@@ -1016,7 +1019,7 @@ class MainWindow(QMainWindow):
 
     def load_config(self) -> None:
         """Load image pairs from a compression settings file."""
-        file_path, _ = QFileDialog.getOpenFileName(self, "Select Config", "", "JSON Files (*.json)")
+        file_path, _ = QFileDialog.getOpenFileName(self, tr("Select Config"), "", "JSON Files (*.json)")
         if not file_path:
             return
         self.load_config_from_path(Path(file_path))
@@ -1043,10 +1046,10 @@ class MainWindow(QMainWindow):
 
     def load_directories(self) -> None:
         """Load image pairs from two directories."""
-        dir1 = QFileDialog.getExistingDirectory(self, "Select First Directory")
+        dir1 = QFileDialog.getExistingDirectory(self, tr("Select First Directory"))
         if not dir1:
             return
-        dir2 = QFileDialog.getExistingDirectory(self, "Select Second Directory")
+        dir2 = QFileDialog.getExistingDirectory(self, tr("Select Second Directory"))
         if not dir2:
             return
         self.load_directories_from_paths(Path(dir1), Path(dir2))
@@ -1130,12 +1133,16 @@ class MainWindow(QMainWindow):
             current_pair = self.image_pairs[self.current_pair_index] if self.current_pair_index >= 0 else None
             if current_pair:
                 self.status_label.setText(
-                    f"Showing: {current_pair.name} ({self.current_pair_index + 1}/{len(self.image_pairs)})"
+                    tr("Showing: {name} ({index}/{total})").format(
+                        name=current_pair.name,
+                        index=self.current_pair_index + 1,
+                        total=len(self.image_pairs),
+                    )
                 )
             else:
-                self.status_label.setText(f"Loaded {len(self.image_pairs)} image pairs")
+                self.status_label.setText(tr("Loaded {count} image pairs").format(count=len(self.image_pairs)))
         else:
-            self.status_label.setText("No images loaded")
+            self.status_label.setText(tr("No images loaded"))
 
 
 def main() -> None:
