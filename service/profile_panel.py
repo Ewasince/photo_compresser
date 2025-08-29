@@ -32,6 +32,7 @@ from service.parameters_defaults import (
     JPEG_DEFAULTS,
     WEBP_DEFAULTS,
 )
+from service.translator import tr
 
 
 def parse_size(text: str) -> int | None:
@@ -98,6 +99,7 @@ class ProfilePanel(QWidget):
         self.removable = removable
         self._wheel_blocker = _WheelBlocker(self)
         self._build_ui()
+        self.update_translations()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -105,7 +107,8 @@ class ProfilePanel(QWidget):
 
         # Profile name and remove button
         name_layout = QHBoxLayout()
-        name_layout.addWidget(QLabel("Name:"))
+        self.name_label = QLabel(tr("Name") + ":")
+        name_layout.addWidget(self.name_label)
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText(self.title)
         name_layout.addWidget(self.name_edit)
@@ -121,17 +124,18 @@ class ProfilePanel(QWidget):
         layout.addLayout(name_layout)
 
         # Compression settings
-        self.basic_group = QGroupBox("Compression Settings")
+        self.basic_group = QGroupBox(tr("Compression Settings"))
         grid = QGridLayout(self.basic_group)
 
-        grid.addWidget(QLabel("Quality:"), 0, 0)
+        self.quality_label = QLabel(tr("Quality") + ":")
+        grid.addWidget(self.quality_label, 0, 0)
         self.quality = QSpinBox()
         self.quality.setRange(1, 100)
         self.quality.setValue(BASIC_DEFAULTS["quality"])
         self.quality.setSuffix("%")
         grid.addWidget(self.quality, 0, 1)
 
-        self.max_largest_cb = QCheckBox("Max largest side:")
+        self.max_largest_cb = QCheckBox(tr("Max largest side") + ":")
         self.max_largest_cb.setChecked(BASIC_DEFAULTS["max_largest_enabled"])
         grid.addWidget(self.max_largest_cb, 1, 0)
         self.max_largest = QSpinBox()
@@ -140,7 +144,7 @@ class ProfilePanel(QWidget):
         self.max_largest.setEnabled(BASIC_DEFAULTS["max_largest_enabled"])
         grid.addWidget(self.max_largest, 1, 1)
 
-        self.max_smallest_cb = QCheckBox("Max smallest side:")
+        self.max_smallest_cb = QCheckBox(tr("Max smallest side") + ":")
         self.max_smallest_cb.setChecked(BASIC_DEFAULTS["max_smallest_enabled"])
         grid.addWidget(self.max_smallest_cb, 2, 0)
         self.max_smallest = QSpinBox()
@@ -149,108 +153,121 @@ class ProfilePanel(QWidget):
         self.max_smallest.setEnabled(BASIC_DEFAULTS["max_smallest_enabled"])
         grid.addWidget(self.max_smallest, 2, 1)
 
-        grid.addWidget(QLabel("Format:"), 3, 0)
+        self.format_label = QLabel(tr("Format") + ":")
+        grid.addWidget(self.format_label, 3, 0)
         self.format_combo = QComboBox()
         self.format_combo.addItems(["JPEG", "WEBP", "AVIF"])
         self.format_combo.setCurrentText(BASIC_DEFAULTS["output_format"])
         grid.addWidget(self.format_combo, 3, 1)
 
-        self.preserve_cb = QCheckBox("Preserve folder structure")
+        self.preserve_cb = QCheckBox(tr("Preserve folder structure"))
         self.preserve_cb.setChecked(BASIC_DEFAULTS["preserve_structure"])
         grid.addWidget(self.preserve_cb, 4, 0, 1, 2)
 
         layout.addWidget(self.basic_group)
 
         # Advanced settings
-        self.advanced_box = CollapsibleBox("Advanced Settings")
+        self.advanced_box = CollapsibleBox(tr("Advanced Settings"))
 
         # JPEG settings
-        self.jpeg_group = QGroupBox("JPEG")
+        self.jpeg_group = QGroupBox(tr("JPEG"))
         jpeg_grid = QGridLayout(self.jpeg_group)
-        self.jpeg_progressive = QCheckBox("Progressive")
+        self.jpeg_progressive = QCheckBox(tr("Progressive"))
         self.jpeg_progressive.setChecked(JPEG_DEFAULTS["progressive"])
         jpeg_grid.addWidget(self.jpeg_progressive, 0, 0, 1, 2)
-        jpeg_grid.addWidget(QLabel("Subsampling:"), 1, 0)
+        self.jpeg_subsampling_label = QLabel(tr("Subsampling") + ":")
+        jpeg_grid.addWidget(self.jpeg_subsampling_label, 1, 0)
         self.jpeg_subsampling = QComboBox()
         self.jpeg_subsampling.addItems(list(SUBSAMPLING_MAP.keys()))
         self.jpeg_subsampling.setCurrentText(JPEG_DEFAULTS["subsampling"])
         jpeg_grid.addWidget(self.jpeg_subsampling, 1, 1)
-        self.jpeg_optimize = QCheckBox("Optimize")
+        self.jpeg_optimize = QCheckBox(tr("Optimize"))
         self.jpeg_optimize.setChecked(JPEG_DEFAULTS["optimize"])
         jpeg_grid.addWidget(self.jpeg_optimize, 2, 0, 1, 2)
-        jpeg_grid.addWidget(QLabel("Smooth:"), 3, 0)
+        self.jpeg_smooth_label = QLabel(tr("Smooth") + ":")
+        jpeg_grid.addWidget(self.jpeg_smooth_label, 3, 0)
         self.jpeg_smooth = QSpinBox()
         self.jpeg_smooth.setRange(0, 100)
         self.jpeg_smooth.setValue(JPEG_DEFAULTS["smooth"])
         jpeg_grid.addWidget(self.jpeg_smooth, 3, 1)
-        self.jpeg_keep_rgb = QCheckBox("Keep RGB")
+        self.jpeg_keep_rgb = QCheckBox(tr("Keep RGB"))
         self.jpeg_keep_rgb.setChecked(JPEG_DEFAULTS["keep_rgb"])
         jpeg_grid.addWidget(self.jpeg_keep_rgb, 4, 0, 1, 2)
         self.advanced_box.add_widget(self.jpeg_group)
 
         # WebP settings
-        self.webp_group = QGroupBox("WebP")
+        self.webp_group = QGroupBox(tr("WebP"))
         webp_grid = QGridLayout(self.webp_group)
-        self.webp_lossless = QCheckBox("Lossless")
+        self.webp_lossless = QCheckBox(tr("Lossless"))
         self.webp_lossless.setChecked(WEBP_DEFAULTS["lossless"])
         webp_grid.addWidget(self.webp_lossless, 0, 0, 1, 2)
-        webp_grid.addWidget(QLabel("Method:"), 1, 0)
+        self.webp_method_label = QLabel(tr("Method") + ":")
+        webp_grid.addWidget(self.webp_method_label, 1, 0)
         self.webp_method = QSpinBox()
         self.webp_method.setRange(0, 6)
         self.webp_method.setValue(WEBP_DEFAULTS["method"])
         webp_grid.addWidget(self.webp_method, 1, 1)
-        webp_grid.addWidget(QLabel("Alpha quality:"), 2, 0)
+        self.webp_alpha_quality_label = QLabel(tr("Alpha Quality") + ":")
+        webp_grid.addWidget(self.webp_alpha_quality_label, 2, 0)
         self.webp_alpha_quality = QSpinBox()
         self.webp_alpha_quality.setRange(0, 100)
         self.webp_alpha_quality.setValue(WEBP_DEFAULTS["alpha_quality"])
         webp_grid.addWidget(self.webp_alpha_quality, 2, 1)
-        self.webp_exact = QCheckBox("Exact alpha")
+        self.webp_exact = QCheckBox(tr("Exact alpha"))
         self.webp_exact.setChecked(WEBP_DEFAULTS["exact"])
         webp_grid.addWidget(self.webp_exact, 3, 0, 1, 2)
         self.advanced_box.add_widget(self.webp_group)
 
         # AVIF settings
-        self.avif_group = QGroupBox("AVIF")
+        self.avif_group = QGroupBox(tr("AVIF"))
         avif_grid = QGridLayout(self.avif_group)
-        avif_grid.addWidget(QLabel("Subsampling:"), 0, 0)
+        self.avif_subsampling_label = QLabel(tr("Subsampling") + ":")
+        avif_grid.addWidget(self.avif_subsampling_label, 0, 0)
         self.avif_subsampling = QComboBox()
         self.avif_subsampling.addItems(["4:2:0", "4:2:2", "4:4:4"])
         self.avif_subsampling.setCurrentText(AVIF_DEFAULTS["subsampling"])
         avif_grid.addWidget(self.avif_subsampling, 0, 1)
-        avif_grid.addWidget(QLabel("Speed:"), 1, 0)
+        self.avif_speed_label = QLabel(tr("Speed") + ":")
+        avif_grid.addWidget(self.avif_speed_label, 1, 0)
         self.avif_speed = QSpinBox()
         self.avif_speed.setRange(0, 10)
         self.avif_speed.setValue(AVIF_DEFAULTS["speed"])
         avif_grid.addWidget(self.avif_speed, 1, 1)
-        avif_grid.addWidget(QLabel("Codec:"), 2, 0)
+        self.avif_codec_label = QLabel(tr("Codec") + ":")
+        avif_grid.addWidget(self.avif_codec_label, 2, 0)
         self.avif_codec = QComboBox()
         self.avif_codec.addItems(["auto", "aom", "rav1e", "svt"])
         self.avif_codec.setCurrentText(AVIF_DEFAULTS["codec"])
         avif_grid.addWidget(self.avif_codec, 2, 1)
-        avif_grid.addWidget(QLabel("Range:"), 3, 0)
+        self.avif_range_label = QLabel(tr("Range") + ":")
+        avif_grid.addWidget(self.avif_range_label, 3, 0)
         self.avif_range = QComboBox()
         self.avif_range.addItems(["full", "limited"])
         self.avif_range.setCurrentText(AVIF_DEFAULTS["range"])
         avif_grid.addWidget(self.avif_range, 3, 1)
-        avif_grid.addWidget(QLabel("Qmin:"), 4, 0)
+        self.avif_qmin_label = QLabel(tr("Qmin") + ":")
+        avif_grid.addWidget(self.avif_qmin_label, 4, 0)
         self.avif_qmin = QSpinBox()
         self.avif_qmin.setRange(-1, 63)
         self.avif_qmin.setValue(AVIF_DEFAULTS["qmin"])
         avif_grid.addWidget(self.avif_qmin, 4, 1)
-        avif_grid.addWidget(QLabel("Qmax:"), 5, 0)
+        self.avif_qmax_label = QLabel(tr("Qmax") + ":")
+        avif_grid.addWidget(self.avif_qmax_label, 5, 0)
         self.avif_qmax = QSpinBox()
         self.avif_qmax.setRange(-1, 63)
         self.avif_qmax.setValue(AVIF_DEFAULTS["qmax"])
         avif_grid.addWidget(self.avif_qmax, 5, 1)
-        self.avif_autotiling = QCheckBox("Autotiling")
+        self.avif_autotiling = QCheckBox(tr("Autotiling"))
         self.avif_autotiling.setChecked(AVIF_DEFAULTS["autotiling"])
         avif_grid.addWidget(self.avif_autotiling, 6, 0, 1, 2)
-        avif_grid.addWidget(QLabel("Tile rows:"), 7, 0)
+        self.avif_tile_rows_label = QLabel(tr("Tile Rows") + ":")
+        avif_grid.addWidget(self.avif_tile_rows_label, 7, 0)
         self.avif_tile_rows = QSpinBox()
         self.avif_tile_rows.setRange(0, 6)
         self.avif_tile_rows.setValue(AVIF_DEFAULTS["tile_rows"])
         avif_grid.addWidget(self.avif_tile_rows, 7, 1)
-        avif_grid.addWidget(QLabel("Tile cols:"), 8, 0)
+        self.avif_tile_cols_label = QLabel(tr("Tile Cols") + ":")
+        avif_grid.addWidget(self.avif_tile_cols_label, 8, 0)
         self.avif_tile_cols = QSpinBox()
         self.avif_tile_cols.setRange(0, 6)
         self.avif_tile_cols.setValue(AVIF_DEFAULTS["tile_cols"])
@@ -263,12 +280,12 @@ class ProfilePanel(QWidget):
         self._update_advanced_visibility(self.format_combo.currentText())
 
         # Conditions sub-panel
-        self.conditions_box = CollapsibleBox("Conditions")
+        self.conditions_box = CollapsibleBox(tr("Conditions"))
         conditions_widget = QWidget()
         cond_grid = QGridLayout(conditions_widget)
         row = 0
 
-        self.cond_smallest_cb = QCheckBox("Smallest side:")
+        self.cond_smallest_cb = QCheckBox(tr("Smallest side") + ":")
         cond_grid.addWidget(self.cond_smallest_cb, row, 0)
         self.cond_smallest_op = QComboBox()
         self.cond_smallest_op.addItems(["<=", "<", ">=", ">", "=="])
@@ -283,7 +300,7 @@ class ProfilePanel(QWidget):
         )
         row += 1
 
-        self.cond_largest_cb = QCheckBox("Largest side:")
+        self.cond_largest_cb = QCheckBox(tr("Largest side") + ":")
         cond_grid.addWidget(self.cond_largest_cb, row, 0)
         self.cond_largest_op = QComboBox()
         self.cond_largest_op.addItems(["<=", "<", ">=", ">", "=="])
@@ -298,7 +315,7 @@ class ProfilePanel(QWidget):
         )
         row += 1
 
-        self.cond_pixels_cb = QCheckBox("Pixels:")
+        self.cond_pixels_cb = QCheckBox(tr("Pixels") + ":")
         cond_grid.addWidget(self.cond_pixels_cb, row, 0)
         self.cond_pixels_op = QComboBox()
         self.cond_pixels_op.addItems(["<=", "<", ">=", ">", "=="])
@@ -313,7 +330,7 @@ class ProfilePanel(QWidget):
         )
         row += 1
 
-        self.cond_aspect_cb = QCheckBox("Aspect ratio:")
+        self.cond_aspect_cb = QCheckBox(tr("Aspect ratio") + ":")
         cond_grid.addWidget(self.cond_aspect_cb, row, 0)
         self.cond_aspect_op = QComboBox()
         self.cond_aspect_op.addItems(["<=", "<", ">=", ">", "=="])
@@ -329,25 +346,33 @@ class ProfilePanel(QWidget):
         )
         row += 1
 
-        cond_grid.addWidget(QLabel("Orientation:"), row, 0)
+        self.orientation_label = QLabel(tr("Orientation") + ":")
+        cond_grid.addWidget(self.orientation_label, row, 0)
         self.orientation_combo = QComboBox()
-        self.orientation_combo.addItems(["Any", "landscape", "portrait", "square"])
+        self.orientation_combo.addItem(tr("Any"), "any")
+        self.orientation_combo.addItem(tr("Landscape"), "landscape")
+        self.orientation_combo.addItem(tr("Portrait"), "portrait")
+        self.orientation_combo.addItem(tr("Square"), "square")
         cond_grid.addWidget(self.orientation_combo, row, 1)
         row += 1
 
-        cond_grid.addWidget(QLabel("Input formats:"), row, 0)
+        self.input_formats_label = QLabel(tr("Input formats") + ":")
+        cond_grid.addWidget(self.input_formats_label, row, 0)
         self.input_formats_edit = QLineEdit()
         self.input_formats_edit.setPlaceholderText("jpg,png")
         cond_grid.addWidget(self.input_formats_edit, row, 1)
         row += 1
 
-        cond_grid.addWidget(QLabel("Transparency:"), row, 0)
+        self.transparency_label = QLabel(tr("Transparency") + ":")
+        cond_grid.addWidget(self.transparency_label, row, 0)
         self.transparency_combo = QComboBox()
-        self.transparency_combo.addItems(["Any", "Requires", "No"])
+        self.transparency_combo.addItem(tr("Any"), "any")
+        self.transparency_combo.addItem(tr("Requires"), "requires")
+        self.transparency_combo.addItem(tr("No"), "no")
         cond_grid.addWidget(self.transparency_combo, row, 1)
         row += 1
 
-        self.cond_bytes_cb = QCheckBox("File size:")
+        self.cond_bytes_cb = QCheckBox(tr("File size") + ":")
         cond_grid.addWidget(self.cond_bytes_cb, row, 0)
         self.cond_bytes_op = QComboBox()
         self.cond_bytes_op.addItems(["<=", "<", ">=", ">", "=="])
@@ -355,13 +380,14 @@ class ProfilePanel(QWidget):
         cond_grid.addWidget(self.cond_bytes_op, row, 1)
         self.cond_bytes = QLineEdit()
         self.cond_bytes.setPlaceholderText("1MB")
-        self.cond_bytes.setToolTip("Examples: 500KB, 2MB, 1.5GB")
+        self.cond_bytes.setToolTip(tr("Examples: 500KB, 2MB, 1.5GB"))
         self.cond_bytes.setEnabled(False)
         cond_grid.addWidget(self.cond_bytes, row, 2)
         self.cond_bytes_cb.stateChanged.connect(lambda s: self._toggle_widgets(s, self.cond_bytes, self.cond_bytes_op))
         row += 1
 
-        cond_grid.addWidget(QLabel("Required EXIF (k=v,...):"), row, 0)
+        self.exif_label = QLabel(tr("Required EXIF (k=v,...)") + ":")
+        cond_grid.addWidget(self.exif_label, row, 0)
         self.exif_edit = QLineEdit()
         cond_grid.addWidget(self.exif_edit, row, 1)
 
@@ -373,7 +399,7 @@ class ProfilePanel(QWidget):
                 w.installEventFilter(self._wheel_blocker)
 
         if not self.allow_conditions:
-            self.conditions_box.toggle_button.setText("Conditions (default profile - always used)")
+            self.conditions_box.toggle_button.setText(tr("Conditions (default profile - always used)"))
             self.conditions_box.toggle_button.setEnabled(False)
             self.conditions_box.content.setEnabled(False)
 
@@ -386,6 +412,75 @@ class ProfilePanel(QWidget):
         self.jpeg_group.setVisible(fmt == "JPEG")
         self.webp_group.setVisible(fmt == "WEBP")
         self.avif_group.setVisible(fmt == "AVIF")
+
+    def update_translations(self) -> None:
+        self.name_label.setText(tr("Name") + ":")
+        if not self.name_edit.text():
+            self.name_edit.setPlaceholderText(self.title)
+        self.basic_group.setTitle(tr("Compression Settings"))
+        self.quality_label.setText(tr("Quality") + ":")
+        self.max_largest_cb.setText(tr("Max largest side") + ":")
+        self.max_smallest_cb.setText(tr("Max smallest side") + ":")
+        self.format_label.setText(tr("Format") + ":")
+        self.preserve_cb.setText(tr("Preserve folder structure"))
+
+        self.advanced_box.toggle_button.setText(tr("Advanced Settings"))
+        self.jpeg_group.setTitle(tr("JPEG"))
+        self.jpeg_progressive.setText(tr("Progressive"))
+        self.jpeg_subsampling_label.setText(tr("Subsampling") + ":")
+        self.jpeg_optimize.setText(tr("Optimize"))
+        self.jpeg_smooth_label.setText(tr("Smooth") + ":")
+        self.jpeg_keep_rgb.setText(tr("Keep RGB"))
+
+        self.webp_group.setTitle(tr("WebP"))
+        self.webp_lossless.setText(tr("Lossless"))
+        self.webp_method_label.setText(tr("Method") + ":")
+        self.webp_alpha_quality_label.setText(tr("Alpha Quality") + ":")
+        self.webp_exact.setText(tr("Exact alpha"))
+
+        self.avif_group.setTitle(tr("AVIF"))
+        self.avif_subsampling_label.setText(tr("Subsampling") + ":")
+        self.avif_speed_label.setText(tr("Speed") + ":")
+        self.avif_codec_label.setText(tr("Codec") + ":")
+        self.avif_range_label.setText(tr("Range") + ":")
+        self.avif_qmin_label.setText(tr("Qmin") + ":")
+        self.avif_qmax_label.setText(tr("Qmax") + ":")
+        self.avif_autotiling.setText(tr("Autotiling"))
+        self.avif_tile_rows_label.setText(tr("Tile Rows") + ":")
+        self.avif_tile_cols_label.setText(tr("Tile Cols") + ":")
+
+        self.conditions_box.toggle_button.setText(tr("Conditions"))
+        self.cond_smallest_cb.setText(tr("Smallest side") + ":")
+        self.cond_largest_cb.setText(tr("Largest side") + ":")
+        self.cond_pixels_cb.setText(tr("Pixels") + ":")
+        self.cond_aspect_cb.setText(tr("Aspect ratio") + ":")
+        self.orientation_label.setText(tr("Orientation") + ":")
+        current_orientation = self.orientation_combo.currentData()
+        self.orientation_combo.clear()
+        self.orientation_combo.addItem(tr("Any"), "any")
+        self.orientation_combo.addItem(tr("Landscape"), "landscape")
+        self.orientation_combo.addItem(tr("Portrait"), "portrait")
+        self.orientation_combo.addItem(tr("Square"), "square")
+        idx = self.orientation_combo.findData(current_orientation if current_orientation else "any")
+        if idx != -1:
+            self.orientation_combo.setCurrentIndex(idx)
+
+        self.input_formats_label.setText(tr("Input formats") + ":")
+        self.transparency_label.setText(tr("Transparency") + ":")
+        current_trans = self.transparency_combo.currentData()
+        self.transparency_combo.clear()
+        self.transparency_combo.addItem(tr("Any"), "any")
+        self.transparency_combo.addItem(tr("Requires"), "requires")
+        self.transparency_combo.addItem(tr("No"), "no")
+        idx = self.transparency_combo.findData(current_trans if current_trans else "any")
+        if idx != -1:
+            self.transparency_combo.setCurrentIndex(idx)
+
+        self.cond_bytes_cb.setText(tr("File size") + ":")
+        self.cond_bytes.setToolTip(tr("Examples: 500KB, 2MB, 1.5GB"))
+        self.exif_label.setText(tr("Required EXIF (k=v,...)") + ":")
+        if not self.allow_conditions:
+            self.conditions_box.toggle_button.setText(tr("Conditions (default profile - always used)"))
 
     # ------------------------------------------------------------------
     def get_parameters(self) -> dict[str, Any]:
@@ -440,13 +535,12 @@ class ProfilePanel(QWidget):
             aspect_ratio=NumericCondition(self.cond_aspect_op.currentText(), self.cond_aspect.value())
             if self.cond_aspect_cb.isChecked()
             else None,
-            orientation=None if self.orientation_combo.currentText() == "Any" else self.orientation_combo.currentText(),
+            orientation=None if self.orientation_combo.currentData() == "any" else self.orientation_combo.currentData(),
             input_formats=[s.strip() for s in self.input_formats_edit.text().split(",") if s.strip()] or None,
             requires_transparency={
-                "Any": None,
-                "Requires": True,
-                "No": False,
-            }[self.transparency_combo.currentText()],
+                "requires": True,
+                "no": False,
+            }.get(self.transparency_combo.currentData()),
             file_size=NumericCondition(self.cond_bytes_op.currentText(), bytes_val) if bytes_val is not None else None,
             required_exif=dict(part.split("=", 1) for part in self.exif_edit.text().split(",") if "=" in part) or None,
         )
@@ -551,9 +645,11 @@ class ProfilePanel(QWidget):
             self.cond_aspect_op.setEnabled(False)
 
         if cond.orientation:
-            self.orientation_combo.setCurrentText(cond.orientation)
+            index = self.orientation_combo.findData(cond.orientation)
+            if index != -1:
+                self.orientation_combo.setCurrentIndex(index)
         else:
-            self.orientation_combo.setCurrentText("Any")
+            self.orientation_combo.setCurrentIndex(self.orientation_combo.findData("any"))
 
         if cond.input_formats:
             self.input_formats_edit.setText(",".join(cond.input_formats))
@@ -561,11 +657,11 @@ class ProfilePanel(QWidget):
             self.input_formats_edit.clear()
 
         if cond.requires_transparency is True:
-            self.transparency_combo.setCurrentText("Requires")
+            self.transparency_combo.setCurrentIndex(self.transparency_combo.findData("requires"))
         elif cond.requires_transparency is False:
-            self.transparency_combo.setCurrentText("No")
+            self.transparency_combo.setCurrentIndex(self.transparency_combo.findData("no"))
         else:
-            self.transparency_combo.setCurrentText("Any")
+            self.transparency_combo.setCurrentIndex(self.transparency_combo.findData("any"))
 
         if cond.file_size is not None:
             self.cond_bytes_cb.setChecked(True)
@@ -630,9 +726,9 @@ class ProfilePanel(QWidget):
         self.cond_aspect_cb.setChecked(False)
         self.cond_aspect.setEnabled(False)
         self.cond_aspect_op.setEnabled(False)
-        self.orientation_combo.setCurrentText("Any")
+        self.orientation_combo.setCurrentIndex(self.orientation_combo.findData("any"))
         self.input_formats_edit.clear()
-        self.transparency_combo.setCurrentText("Any")
+        self.transparency_combo.setCurrentIndex(self.transparency_combo.findData("any"))
         self.cond_bytes_cb.setChecked(False)
         self.cond_bytes.setEnabled(False)
         self.cond_bytes_op.setEnabled(False)
