@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QVBoxLayout,
@@ -58,6 +59,30 @@ BUTTON_STYLE = """
         color: #aaa;
     }
 """
+
+
+class LoadingDialog(QDialog):
+    """Modal dialog showing preview loading progress."""
+
+    def __init__(self, total: int, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Loading Previews")
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+        self.label = QLabel()
+        self.progress = QProgressBar()
+        self.progress.setRange(0, total)
+
+        layout.addWidget(self.label)
+        layout.addWidget(self.progress)
+        self.update_progress(0)
+
+    def update_progress(self, current: int) -> None:
+        """Update displayed progress."""
+
+        self.progress.setValue(current)
+        self.label.setText(f"Generating previews: {current}/{self.progress.maximum()}")
 
 
 FORMATS_PATTERNS = " ".join(f"*.{f}" for f in SUPPORTED_EXTENSIONS)
@@ -912,6 +937,22 @@ class MainWindow(QMainWindow):
         self.stats_button.setEnabled(False)
         self.update_status()
 
+    def _preload_thumbnails(self) -> None:
+        """Generate thumbnails for all loaded pairs with progress."""
+
+        total = len(self.image_pairs)
+        if total == 0:
+            return
+
+        dialog = LoadingDialog(total, self)
+        dialog.show()
+        QApplication.processEvents()
+        for idx, pair in enumerate(self.image_pairs, start=1):
+            pair.create_thumbnail()
+            dialog.update_progress(idx)
+            QApplication.processEvents()
+        dialog.close()
+
     def load_config(self) -> None:
         """Load image pairs from a compression settings file."""
         file_path, _ = QFileDialog.getOpenFileName(self, "Select Config", "", "JSON Files (*.json)")
@@ -934,6 +975,7 @@ class MainWindow(QMainWindow):
                 image_pair = ImagePair(orig, comp, name)
                 self.image_pairs.append(image_pair)
                 self.carousel.add_image_pair(image_pair)
+        self._preload_thumbnails()
         if self.image_pairs:
             self.load_image_pair_from_thumbnail(self.image_pairs[0])
         self.update_status()
@@ -971,6 +1013,8 @@ class MainWindow(QMainWindow):
                 image_pair = ImagePair(str(file1), str(file2), pair_name)
                 self.image_pairs.append(image_pair)
                 self.carousel.add_image_pair(image_pair)
+
+        self._preload_thumbnails()
 
         if self.image_pairs:
             self.load_image_pair_from_thumbnail(self.image_pairs[0])
