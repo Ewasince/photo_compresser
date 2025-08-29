@@ -7,7 +7,7 @@ Handles image compression with configurable quality and size parameters.
 import logging
 import shutil
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 from PIL import Image
 from pillow_heif import register_heif_opener
@@ -257,6 +257,7 @@ class ImageCompressor:
         input_root: Path,
         output_root: Path,
         profiles: Sequence[CompressionProfile] | None = None,
+        progress_callback: Callable[[int, int], None] | None = None,
     ) -> tuple[int, int, list[Path], list[Path]]:
         """
         Process a directory recursively, compressing all supported images.
@@ -268,10 +269,14 @@ class ImageCompressor:
         Returns:
             Tuple of (total_files, compressed_files, compressed_paths, failed_files)
         """
-        total_files = 0
+        total_files = sum(1 for f in input_root.rglob("*") if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS)
+        processed_files = 0
         compressed_files = 0
         compressed_paths = []
         failed_files: list[Path] = []
+
+        if progress_callback:
+            progress_callback(0, total_files)
 
         # Ensure output directory does not already exist
         if output_root.exists():
@@ -284,8 +289,6 @@ class ImageCompressor:
                 continue
 
             if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
-                total_files += 1
-
                 if profiles:
                     profile = select_profile(file_path, profiles)
                     if profile:
@@ -315,6 +318,10 @@ class ImageCompressor:
                 else:
                     logger.warning(f"Failed to compress: {file_path.name}")
                     failed_files.append(file_path)
+
+                processed_files += 1
+                if progress_callback:
+                    progress_callback(processed_files, total_files)
             else:
                 # Copy non-image files to output directory
                 if self.preserve_structure:
