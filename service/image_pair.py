@@ -12,8 +12,8 @@ from collections import OrderedDict
 from dataclasses import dataclass
 
 from PIL import Image
-from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
+from PySide6.QtCore import QSize
+from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 
 from service.cache_config import CacheConfig, load_cache_config
 
