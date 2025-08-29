@@ -7,11 +7,12 @@ Handles image compression with configurable quality and size parameters.
 import logging
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from PIL import Image
 from pillow_heif import register_heif_opener
 
+from service.compression_profiles import CompressionProfile, select_profile
 from service.constants import SUPPORTED_EXTENSIONS
 from service.file_utils import copy_times_from_src
 from service.save_functions import save_avif, save_jpeg, save_webp
@@ -56,6 +57,17 @@ class ImageCompressor:
         self.webp_params: dict[str, Any] = {}
         self.avif_params: dict[str, Any] = {}
 
+    def apply_profile(self, profile: CompressionProfile) -> None:
+        """Apply settings from a compression profile to this compressor."""
+        self.quality = profile.quality
+        self.max_largest_side = profile.max_largest_side
+        self.max_smallest_side = profile.max_smallest_side
+        self.preserve_structure = profile.preserve_structure
+        self.output_format = profile.output_format.upper()
+        self.set_jpeg_parameters(**profile.jpeg_params)
+        self.set_webp_parameters(**profile.webp_params)
+        self.set_avif_parameters(**profile.avif_params)
+
     def set_jpeg_parameters(self, **kwargs: Any) -> None:
         """Set JPEG-specific compression parameters."""
         self.jpeg_params = kwargs
@@ -67,30 +79,6 @@ class ImageCompressor:
     def set_avif_parameters(self, **kwargs: Any) -> None:
         """Set AVIF-specific compression parameters."""
         self.avif_params = kwargs
-
-    def should_compress_image(self, image_path: Path) -> bool:
-        """Check if the image should be compressed based on its current size."""
-        try:
-            with Image.open(image_path) as img:
-                width, height = img.size
-                largest_side = max(width, height)
-                smallest_side = min(width, height)
-
-                # Check if image needs resizing
-                needs_resize = False
-                if self.max_largest_side is not None and largest_side > self.max_largest_side:
-                    needs_resize = True
-                if self.max_smallest_side is not None and smallest_side > self.max_smallest_side:
-                    needs_resize = True
-
-                # Check if image needs quality compression (for all formats)
-                needs_quality_compression = True  # Always recompress to ensure quality settings
-
-                return needs_resize or needs_quality_compression
-
-        except Exception as e:
-            logger.warning(f"Could not analyze image {image_path}: {e}")
-            return False
 
     def compress_image(self, input_path: Path, output_path: Path) -> Path | None:
         """
@@ -264,7 +252,12 @@ class ImageCompressor:
             return ".avif"
         return ".jpg"  # Default fallback
 
-    def process_directory(self, input_root: Path, output_root: Path) -> tuple[int, int, list[Path], list[Path]]:
+    def process_directory(
+        self,
+        input_root: Path,
+        output_root: Path,
+        profiles: Sequence[CompressionProfile] | None = None,
+    ) -> tuple[int, int, list[Path], list[Path]]:
         """
         Process a directory recursively, compressing all supported images.
 
@@ -280,8 +273,10 @@ class ImageCompressor:
         compressed_paths = []
         failed_files: list[Path] = []
 
-        # Ensure output directory exists
-        output_root.mkdir(parents=True, exist_ok=True)
+        # Ensure output directory does not already exist
+        if output_root.exists():
+            raise FileExistsError(f"Output directory {output_root} already exists")
+        output_root.mkdir(parents=True)
 
         # Walk through input directory
         for file_path in input_root.rglob("*"):
@@ -291,7 +286,12 @@ class ImageCompressor:
             if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
                 total_files += 1
 
-                # Determine output file path
+                if profiles:
+                    profile = select_profile(file_path, profiles)
+                    if profile:
+                        self.apply_profile(profile)
+
+                # Determine output file path after applying profile
                 if self.preserve_structure:
                     base_name = file_path.stem
                     new_extension = self._get_extension_according_format()
