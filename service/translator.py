@@ -105,15 +105,41 @@ _translations: dict[str, dict[str, str]] = {
         "Files Compressed": "Файлов сжато",
         "Failed Files": "Ошибок",
         "Conversion Time": "Время преобразования",
+        "Name": "Имя",
+        "Compression Settings": "Настройки сжатия",
+        "Max largest side": "Макс. большая сторона",
+        "Max smallest side": "Макс. меньшая сторона",
+        "Format": "Формат",
+        "Preserve folder structure": "Сохранить структуру папок",
+        "Advanced Settings": "Расширенные настройки",
+        "Exact alpha": "Точная альфа",
+        "Smallest side": "Меньшая сторона",
+        "Largest side": "Большая сторона",
+        "Pixels": "Пиксели",
+        "Aspect ratio": "Соотношение сторон",
+        "Orientation": "Ориентация",
+        "Any": "Любая",
+        "Landscape": "Альбомная",
+        "Portrait": "Портретная",
+        "Square": "Квадратная",
+        "Input formats": "Входные форматы",
+        "Transparency": "Прозрачность",
+        "Requires": "Требуется",
+        "No": "Нет",
+        "File size": "Размер файла",
+        "Examples: 500KB, 2MB, 1.5GB": "Примеры: 500KB, 2MB, 1.5GB",
+        "Required EXIF (k=v,...)": "Требуемый EXIF (k=v,...)",
+        "Conditions": "Условия",
+        "Conditions (default profile - always used)": "Условия (профиль по умолчанию — используется всегда)",
     }
 }
 
 
 def _detect_system_language() -> str:
     """Return a language code based on system locale."""
-    language, _ = locale.getlocale()
-    if language:
-        code = language.split("_")[0].lower()
+    lang, _ = locale.getdefaultlocale()
+    if lang:
+        code = lang.split("_")[0].lower()
         if code in LANGUAGES:
             return code
     return "en"
