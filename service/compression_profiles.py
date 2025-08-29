@@ -149,7 +149,12 @@ def load_profiles(file_path: Path) -> list[CompressionProfile]:
 def select_profile(
     image: Path | str | Image.Image, profiles: Sequence[CompressionProfile]
 ) -> CompressionProfile | None:
-    """Return the first profile whose conditions match the image."""
+    """Return the first profile whose conditions match the image.
+
+    Profiles are evaluated from the end of the sequence to the start so that
+    lower panels in the UI take precedence over the ones above them. The top
+    profile therefore acts as a default fallback.
+    """
     file_size: int | None = None
     if isinstance(image, str | Path):
         path = Path(image)
@@ -164,7 +169,7 @@ def select_profile(
         image_format = (image.format or "").upper()
         has_transparency = "A" in image.getbands() or "transparency" in image.info
         exif = {ExifTags.TAGS.get(k, str(k)): v for k, v in image.getexif().items()}
-    for profile in profiles:
+    for profile in reversed(profiles):
         if profile.conditions.matches(
             width,
             height,

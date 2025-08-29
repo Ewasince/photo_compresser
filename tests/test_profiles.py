@@ -14,18 +14,18 @@ from service.compression_profiles import (
 
 def test_profile_save_load_and_selection(tmp_path: Path) -> None:
     profiles = [
+        CompressionProfile(name="default", quality=75),
         CompressionProfile(
             name="small",
             quality=90,
             conditions=ProfileConditions(smallest_side=NumericCondition(op="<=", value=1080)),
         ),
-        CompressionProfile(name="default", quality=75),
     ]
     file_path = tmp_path / "profiles.json"
     save_profiles(profiles, file_path)
     loaded = load_profiles(file_path)
 
-    assert [p.name for p in loaded] == ["small", "default"]
+    assert [p.name for p in loaded] == ["default", "small"]
 
     small_image = tmp_path / "small.jpg"
     Image.new("RGB", (800, 600)).save(small_image)
@@ -42,6 +42,7 @@ def test_profile_save_load_and_selection(tmp_path: Path) -> None:
 
 def test_profile_orientation_and_format(tmp_path: Path) -> None:
     profiles = [
+        CompressionProfile(name="default"),
         CompressionProfile(
             name="portrait_png",
             conditions=ProfileConditions(
@@ -50,7 +51,6 @@ def test_profile_orientation_and_format(tmp_path: Path) -> None:
                 requires_transparency=True,
             ),
         ),
-        CompressionProfile(name="default"),
     ]
 
     portrait = tmp_path / "portrait.png"
@@ -65,3 +65,42 @@ def test_profile_orientation_and_format(tmp_path: Path) -> None:
     profile = select_profile(landscape, profiles)
     assert profile is not None
     assert profile.name == "default"
+
+
+def test_profile_priority_interface() -> None:
+    profiles = [
+        CompressionProfile(name="default"),
+        CompressionProfile(
+            name="middle",
+            conditions=ProfileConditions(smallest_side=NumericCondition(op=">=", value=500)),
+        ),
+        CompressionProfile(
+            name="bottom",
+            conditions=ProfileConditions(smallest_side=NumericCondition(op=">=", value=500)),
+        ),
+    ]
+    img = Image.new("RGB", (600, 600))
+    profile = select_profile(img, profiles)
+    assert profile is not None
+    assert profile.name == "bottom"
+
+
+def test_profile_priority_loaded(tmp_path: Path) -> None:
+    profiles = [
+        CompressionProfile(name="default"),
+        CompressionProfile(
+            name="middle",
+            conditions=ProfileConditions(smallest_side=NumericCondition(op=">=", value=500)),
+        ),
+        CompressionProfile(
+            name="bottom",
+            conditions=ProfileConditions(smallest_side=NumericCondition(op=">=", value=500)),
+        ),
+    ]
+    file_path = tmp_path / "profiles.json"
+    save_profiles(profiles, file_path)
+    loaded = load_profiles(file_path)
+    img = Image.new("RGB", (600, 600))
+    profile = select_profile(img, loaded)
+    assert profile is not None
+    assert profile.name == "bottom"
