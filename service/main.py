@@ -19,9 +19,11 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -33,6 +35,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from service.compression_profiles import (
+    CompressionProfile,
+    load_profiles,
+    save_profiles,
+)
 from service.file_utils import format_timedelta
 
 # Import our modules
@@ -299,6 +306,14 @@ class MainWindow(QMainWindow):
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 10, 0)
         header_layout.addStretch()
+
+        self.profiles_btn = QPushButton("Profiles")
+        self.profiles_menu = QMenu(self.profiles_btn)
+        self.profiles_menu.addAction("Save", self.save_profiles)
+        self.profiles_menu.addAction("Load", self.load_profiles)
+        self.profiles_btn.setMenu(self.profiles_menu)
+        header_layout.addWidget(self.profiles_btn)
+
         self.reset_btn = QPushButton("Reset Settings")
         self.reset_btn.setStyleSheet("""
             QPushButton {
@@ -837,6 +852,131 @@ class MainWindow(QMainWindow):
         if "4:2:0" in text:
             return 2
         return -1  # Auto
+
+    def _set_jpeg_subsampling_value(self, value: int | str) -> None:
+        mapping = {
+            -1: "Auto (-1)",
+            0: "4:4:4 (0)",
+            1: "4:2:2 (1)",
+            2: "4:2:0 (2)",
+        }
+        key = int(value) if isinstance(value, str) else value
+        self.jpeg_subsampling.setCurrentText(mapping.get(key, "Auto (-1)"))
+
+    def _build_profile_from_params(self, name: str, params: dict[str, Any]) -> CompressionProfile:
+        format_name = params["output_format"].lower()
+        profile = CompressionProfile(
+            name=name,
+            quality=params["quality"],
+            max_largest_side=params["max_largest_side"],
+            max_smallest_side=params["max_smallest_side"],
+            output_format=params["output_format"],
+            preserve_structure=params["preserve_structure"],
+        )
+        if format_name == "jpeg":
+            profile.jpeg_params = {
+                "progressive": params.get("progressive", False),
+                "subsampling": params.get("subsampling", -1),
+                "optimize": params.get("optimize", False),
+                "smooth": params.get("smooth", 0),
+                "keep_rgb": params.get("keep_rgb", False),
+            }
+        elif format_name == "webp":
+            profile.webp_params = {
+                "lossless": params.get("lossless", False),
+                "method": params.get("method", 4),
+                "alpha_quality": params.get("alpha_quality", 100),
+                "exact": params.get("exact", False),
+            }
+        elif format_name == "avif":
+            profile.avif_params = {
+                "subsampling": params.get("subsampling", "4:2:0"),
+                "speed": params.get("speed", 6),
+                "codec": params.get("codec", "auto"),
+                "range": params.get("range", "full"),
+                "qmin": params.get("qmin", -1),
+                "qmax": params.get("qmax", -1),
+                "autotiling": params.get("autotiling", True),
+                "tile_rows": params.get("tile_rows", 0),
+                "tile_cols": params.get("tile_cols", 0),
+            }
+        return profile
+
+    def apply_profile(self, profile: CompressionProfile) -> None:
+        self.quality_spinbox.setValue(profile.quality)
+
+        if profile.max_largest_side is not None:
+            self.max_largest_checkbox.setChecked(True)
+            self.max_largest_spinbox.setValue(profile.max_largest_side)
+        else:
+            self.max_largest_checkbox.setChecked(False)
+        self.max_largest_spinbox.setEnabled(profile.max_largest_side is not None)
+
+        if profile.max_smallest_side is not None:
+            self.max_smallest_checkbox.setChecked(True)
+            self.max_smallest_spinbox.setValue(profile.max_smallest_side)
+        else:
+            self.max_smallest_checkbox.setChecked(False)
+        self.max_smallest_spinbox.setEnabled(profile.max_smallest_side is not None)
+
+        self.format_combo.setCurrentText(profile.output_format)
+        self.preserve_structure_checkbox.setChecked(profile.preserve_structure)
+
+        fmt = profile.output_format.lower()
+        if fmt == "jpeg":
+            p = profile.jpeg_params
+            self.jpeg_progressive.setChecked(p.get("progressive", False))
+            self._set_jpeg_subsampling_value(p.get("subsampling", -1))
+            self.jpeg_optimize.setChecked(p.get("optimize", False))
+            self.jpeg_smooth.setValue(p.get("smooth", 0))
+            self.jpeg_keep_rgb.setChecked(p.get("keep_rgb", False))
+        elif fmt == "webp":
+            p = profile.webp_params
+            self.webp_lossless.setChecked(p.get("lossless", False))
+            self.webp_method.setValue(p.get("method", 4))
+            self.webp_alpha_quality.setValue(p.get("alpha_quality", 100))
+            self.webp_exact.setChecked(p.get("exact", False))
+        elif fmt == "avif":
+            p = profile.avif_params
+            self.avif_subsampling.setCurrentText(p.get("subsampling", "4:2:0"))
+            self.avif_speed.setValue(p.get("speed", 6))
+            self.avif_codec.setCurrentText(p.get("codec", "auto"))
+            self.avif_range.setCurrentText(p.get("range", "full"))
+            self.avif_qmin.setValue(p.get("qmin", -1))
+            self.avif_qmax.setValue(p.get("qmax", -1))
+            self.avif_autotiling.setChecked(p.get("autotiling", True))
+            self.avif_tile_rows.setValue(p.get("tile_rows", 0))
+            self.avif_tile_cols.setValue(p.get("tile_cols", 0))
+
+        self.update_format_specific_settings()
+
+    def save_profiles(self) -> None:
+        params = self.get_compression_parameters()
+        name, ok = QInputDialog.getText(self, "Save Profile", "Profile name:")
+        if not ok or not name:
+            return
+        profile = self._build_profile_from_params(name, params)
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save Profiles", "profiles.json", "JSON Files (*.json)")
+        if not file_name:
+            return
+        save_profiles([profile], Path(file_name))
+        self.log_message(f"Profile '{name}' saved to {file_name}")
+
+    def load_profiles(self) -> None:
+        file_name, _ = QFileDialog.getOpenFileName(self, "Load Profiles", "", "JSON Files (*.json)")
+        if not file_name:
+            return
+        profiles = load_profiles(Path(file_name))
+        if not profiles:
+            QMessageBox.warning(self, "Warning", "No profiles found in file.")
+            return
+        names = [p.name for p in profiles]
+        name, ok = QInputDialog.getItem(self, "Select Profile", "Profile:", names, 0, False)
+        if not ok:
+            return
+        profile = next(p for p in profiles if p.name == name)
+        self.apply_profile(profile)
+        self.log_message(f"Profile '{name}' loaded from {file_name}")
 
     def start_compression(self) -> None:
         """Start the compression process."""

@@ -68,30 +68,6 @@ class ImageCompressor:
         """Set AVIF-specific compression parameters."""
         self.avif_params = kwargs
 
-    def should_compress_image(self, image_path: Path) -> bool:
-        """Check if the image should be compressed based on its current size."""
-        try:
-            with Image.open(image_path) as img:
-                width, height = img.size
-                largest_side = max(width, height)
-                smallest_side = min(width, height)
-
-                # Check if image needs resizing
-                needs_resize = False
-                if self.max_largest_side is not None and largest_side > self.max_largest_side:
-                    needs_resize = True
-                if self.max_smallest_side is not None and smallest_side > self.max_smallest_side:
-                    needs_resize = True
-
-                # Check if image needs quality compression (for all formats)
-                needs_quality_compression = True  # Always recompress to ensure quality settings
-
-                return needs_resize or needs_quality_compression
-
-        except Exception as e:
-            logger.warning(f"Could not analyze image {image_path}: {e}")
-            return False
-
     def compress_image(self, input_path: Path, output_path: Path) -> Path | None:
         """
         Compress a single image according to the specified parameters.
