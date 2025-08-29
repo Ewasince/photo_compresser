@@ -13,6 +13,7 @@
   - Выбор формата вывода (JPEG, WebP, AVIF)
 - **Сохранение структуры папок**: Опция для сохранения или уплощения структуры папок
 - **Поддержка форматов**: JPEG, PNG, BMP, TIFF, WebP
+- **Параллельная обработка**: Настраиваемое количество потоков для ускорения сжатия
 - **Статистика сжатия**: Показывает размер до/после, процент сжатия, экономию места
 
 ### Сравнение изображений
@@ -58,6 +59,15 @@ python main.py
      - ❌ Выключено: Все файлы помещаются в одну папку (например, `Photos/Vacation/IMG_001.jpg` → `Photos_compressed/IMG_001.jpg`)
 3. **Запуск сжатия**: Нажмите "Start Compression"
 4. **Просмотр результатов**: После завершения нажмите "Compare Images"
+
+### Использование в коде
+
+```python
+from service.image_compression import ImageCompressor
+
+compressor = ImageCompressor(num_workers=4)
+compressor.process_directory(input_path, output_path, num_workers=4)
+```
 
 ### Сравнение изображений
 

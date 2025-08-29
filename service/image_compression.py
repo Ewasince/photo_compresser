@@ -6,6 +6,7 @@ Handles image compression with configurable quality and size parameters.
 
 import logging
 import shutil
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
@@ -35,6 +36,7 @@ class ImageCompressor:
         max_smallest_side: int | None = 1080,
         preserve_structure: bool = True,
         output_format: str = "JPEG",
+        num_workers: int = 1,
     ):
         """
         Initialize the image compressor.
@@ -45,12 +47,14 @@ class ImageCompressor:
             max_smallest_side: Maximum size of the smallest side in pixels. If None, no limit.
             preserve_structure: Whether to preserve folder structure
             output_format: Output format ('JPEG', 'WebP', 'AVIF')
+            num_workers: Number of worker threads for parallel processing
         """
         self.quality = max(1, min(100, quality))
         self.max_largest_side = max_largest_side
         self.max_smallest_side = max_smallest_side
         self.preserve_structure = preserve_structure
         self.output_format = output_format.upper()
+        self.num_workers = max(1, num_workers)
 
         # Store advanced parameters for each format
         self.jpeg_params: dict[str, Any] = {}
@@ -258,6 +262,7 @@ class ImageCompressor:
         output_root: Path,
         profiles: Sequence[CompressionProfile] | None = None,
         progress_callback: Callable[[int, int], None] | None = None,
+        num_workers: int | None = None,
     ) -> tuple[int, int, list[Path], list[Path]]:
         """
         Process a directory recursively, compressing all supported images.
@@ -272,7 +277,7 @@ class ImageCompressor:
         total_files = sum(1 for f in input_root.rglob("*") if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS)
         processed_files = 0
         compressed_files = 0
-        compressed_paths = []
+        compressed_paths: list[Path] = []
         failed_files: list[Path] = []
 
         if progress_callback:
@@ -283,61 +288,102 @@ class ImageCompressor:
             raise FileExistsError(f"Output directory {output_root} already exists")
         output_root.mkdir(parents=True)
 
-        # Walk through input directory
+        worker_count = max(1, num_workers or self.num_workers)
+
+        tasks: list[tuple[ImageCompressor, Path, Path]] = []
+        used_names: set[Path] = set()
+
+        def _clone_with_profile(profile: CompressionProfile | None) -> "ImageCompressor":
+            clone = ImageCompressor(
+                quality=self.quality,
+                max_largest_side=self.max_largest_side,
+                max_smallest_side=self.max_smallest_side,
+                preserve_structure=self.preserve_structure,
+                output_format=self.output_format,
+            )
+            clone.set_jpeg_parameters(**self.jpeg_params)
+            clone.set_webp_parameters(**self.webp_params)
+            clone.set_avif_parameters(**self.avif_params)
+            if profile:
+                clone.apply_profile(profile)
+            return clone
+
+        # Prepare tasks and copy non-image files
         for file_path in input_root.rglob("*"):
             if not file_path.is_file():
                 continue
 
             if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
-                if profiles:
-                    profile = select_profile(file_path, profiles)
-                    if profile:
-                        self.apply_profile(profile)
+                profile = select_profile(file_path, profiles) if profiles else None
+                compressor = _clone_with_profile(profile)
 
-                # Determine output file path after applying profile
-                if self.preserve_structure:
+                if compressor.preserve_structure:
                     base_name = file_path.stem
-                    new_extension = self._get_extension_according_format()
+                    new_extension = compressor._get_extension_according_format()
                     output_file = output_root / f"{base_name}{new_extension}"
                 else:
                     base_name = file_path.stem
-                    new_extension = self._get_extension_according_format()
+                    new_extension = compressor._get_extension_according_format()
                     counter = 1
                     output_file = output_root / f"{base_name}{new_extension}"
-                    while output_file.exists():
+                    while output_file in used_names or output_file.exists():
                         output_file = output_root / f"{base_name}_{counter}{new_extension}"
                         counter += 1
 
-                # Compress the image
-                saved_path = self.compress_image(file_path, output_file)
-                if saved_path:
-                    compressed_files += 1
-                    compressed_paths.append(saved_path)
-                    copy_times_from_src(file_path, saved_path)
-                    logger.info(f"Successfully compressed: {file_path.name}")
-                else:
-                    logger.warning(f"Failed to compress: {file_path.name}")
-                    failed_files.append(file_path)
-
-                processed_files += 1
-                if progress_callback:
-                    progress_callback(processed_files, total_files)
+                used_names.add(output_file)
+                tasks.append((compressor, file_path, output_file))
             else:
-                # Copy non-image files to output directory
                 if self.preserve_structure:
                     rel_path = file_path.relative_to(input_root)
                     output_file = output_root / rel_path
                 else:
                     output_file = output_root / file_path.name
                     counter = 1
-                    while output_file.exists():
+                    while output_file in used_names or output_file.exists():
                         output_file = output_root / f"{file_path.stem}_{counter}{file_path.suffix}"
                         counter += 1
+                    used_names.add(output_file)
 
                 output_file.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(file_path, output_file)
                 copy_times_from_src(file_path, output_file)
                 logger.info(f"Copied non-image file: {file_path.name}")
+
+        def _compress_task(comp: "ImageCompressor", src: Path, dst: Path) -> tuple[Path | None, Path]:
+            saved = comp.compress_image(src, dst)
+            if saved:
+                copy_times_from_src(src, saved)
+            return saved, src
+
+        if worker_count > 1:
+            with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                future_to_file = [executor.submit(_compress_task, c, s, d) for c, s, d in tasks]
+                for future in as_completed(future_to_file):
+                    saved_path, src_file = future.result()
+                    if saved_path:
+                        compressed_files += 1
+                        compressed_paths.append(saved_path)
+                        logger.info(f"Successfully compressed: {src_file.name}")
+                    else:
+                        failed_files.append(src_file)
+                        logger.warning(f"Failed to compress: {src_file.name}")
+                    processed_files += 1
+                    if progress_callback:
+                        progress_callback(processed_files, total_files)
+        else:
+            for comp, src, dst in tasks:
+                saved_path = comp.compress_image(src, dst)
+                if saved_path:
+                    copy_times_from_src(src, saved_path)
+                    compressed_files += 1
+                    compressed_paths.append(saved_path)
+                    logger.info(f"Successfully compressed: {src.name}")
+                else:
+                    failed_files.append(src)
+                    logger.warning(f"Failed to compress: {src.name}")
+                processed_files += 1
+                if progress_callback:
+                    progress_callback(processed_files, total_files)
 
         logger.info(f"Compression complete: {compressed_files}/{total_files} files processed")
         return total_files, compressed_files, compressed_paths, failed_files
