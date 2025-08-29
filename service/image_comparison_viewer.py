@@ -6,18 +6,22 @@ A PyQt6 application for comparing pairs of images with interactive features.
 
 import json
 import sys
+from concurrent.futures import Future, ProcessPoolExecutor
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from PyQt6.QtCore import QPoint, QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
+    QImage,
     QMouseEvent,
     QPainter,
     QPaintEvent,
     QPen,
     QPixmap,
+    QResizeEvent,
+    QShowEvent,
     QWheelEvent,
 )
 from PyQt6.QtWidgets import (
@@ -429,6 +433,8 @@ class ComparisonViewer(QWidget):
 class ThumbnailWidget(QWidget):
     """Widget for displaying a thumbnail in the carousel."""
 
+    _executor: ClassVar[ProcessPoolExecutor] = ProcessPoolExecutor(max_workers=2)
+
     clicked = pyqtSignal(ImagePair)
 
     def __init__(self, image_pair: ImagePair, parent: QWidget | None = None) -> None:
@@ -439,9 +445,7 @@ class ThumbnailWidget(QWidget):
         self.thumbnail_size = QSize(100, 100)
         self._thumbnail: QPixmap | None = None
         self._is_loading = False
-        self._spinner_angle = 0
-        self._spinner_timer = QTimer(self)
-        self._spinner_timer.timeout.connect(self._advance_spinner)
+        self._future: Future[bytes] | None = None
 
         self.setStyleSheet("""
             QWidget {
@@ -456,14 +460,46 @@ class ThumbnailWidget(QWidget):
             }
         """)
 
-    def _advance_spinner(self) -> None:
-        self._spinner_angle = (self._spinner_angle + 30) % 360
-        self.update()
+    def start_loading(self) -> None:
+        """Begin loading the thumbnail if not already in progress."""
+        if self._is_loading or self._thumbnail is not None:
+            return
+        self._is_loading = True
 
-    def _load_thumbnail(self) -> None:
-        self._thumbnail = self.image_pair.create_thumbnail(self.thumbnail_size)
+        def handle_result(fut: Future[bytes]) -> None:
+            if self._future is not fut:
+                return
+            if fut.cancelled():
+                QTimer.singleShot(0, self._reset_state)
+                return
+            try:
+                data = fut.result()
+            except Exception:  # pragma: no cover - best effort
+                QTimer.singleShot(0, self._reset_state)
+                return
+            image = QImage.fromData(data, "PNG")
+            QTimer.singleShot(0, lambda: self._set_thumbnail(QPixmap.fromImage(image)))
+
+        future = self._executor.submit(
+            self.image_pair.create_thumbnail_bytes,
+            (self.thumbnail_size.width(), self.thumbnail_size.height()),
+        )
+        self._future = future
+        future.add_done_callback(handle_result)
+
+    def cancel_loading(self) -> None:
+        """Cancel an in-progress thumbnail load."""
+        if self._future is not None and not self._future.done():
+            self._future.cancel()
+        self._reset_state()
+
+    def _reset_state(self) -> None:
+        self._future = None
         self._is_loading = False
-        self._spinner_timer.stop()
+
+    def _set_thumbnail(self, pixmap: QPixmap) -> None:
+        self._thumbnail = pixmap
+        self._reset_state()
         self.update()
 
     def paintEvent(self, event: QPaintEvent | None) -> None:  # noqa: ARG002
@@ -474,23 +510,7 @@ class ThumbnailWidget(QWidget):
         available_height = self.height() - label_height
 
         if self._thumbnail is None:
-            if not self._is_loading:
-                self._is_loading = True
-                self._spinner_timer.start(100)
-                QTimer.singleShot(10, self._load_thumbnail)
-            radius = 15
-            center = self.rect().center()
-            pen = QPen(QColor(200, 200, 200))
-            pen.setWidth(3)
-            painter.setPen(pen)
-            painter.drawArc(
-                center.x() - radius,
-                center.y() - radius,
-                radius * 2,
-                radius * 2,
-                self._spinner_angle * 16,
-                120 * 16,
-            )
+            painter.fillRect(QRect(10, 10, self.thumbnail_size.width(), available_height - 20), QColor(80, 80, 80))
         else:
             x = (self.width() - self._thumbnail.width()) // 2
             y = (available_height - self._thumbnail.height()) // 2
@@ -556,11 +576,24 @@ class ThumbnailCarousel(QScrollArea):
             }
         """)
 
+        self._load_timer = QTimer(self)
+        self._load_timer.setSingleShot(True)
+        self._load_timer.setInterval(50)
+        self._load_timer.timeout.connect(self.load_visible_thumbnails)
+
+        # Track the index range of thumbnails currently visible
+        self._visible_range: tuple[int, int] = (0, -1)
+
+        scroll_bar = self.horizontalScrollBar()
+        if scroll_bar is not None:
+            scroll_bar.valueChanged.connect(self._schedule_load_visible_thumbnails)
+
     def add_image_pair(self, image_pair: ImagePair) -> None:
         """Add an image pair thumbnail to the carousel."""
         thumbnail = ThumbnailWidget(image_pair)
         thumbnail.clicked.connect(self.thumbnail_clicked.emit)
         self.container_layout.addWidget(thumbnail)
+        QTimer.singleShot(0, self._schedule_load_visible_thumbnails)
 
     def clear(self) -> None:
         """Clear all thumbnails."""
@@ -568,8 +601,70 @@ class ThumbnailCarousel(QScrollArea):
             child = self.container_layout.takeAt(0)
             if child is not None:
                 widget = child.widget()
-                if widget is not None:
+                if isinstance(widget, ThumbnailWidget):
+                    widget.cancel_loading()
                     widget.deleteLater()
+
+    def resizeEvent(self, event: QResizeEvent | None) -> None:
+        super().resizeEvent(event)
+        self._schedule_load_visible_thumbnails()
+
+    def showEvent(self, event: QShowEvent | None) -> None:
+        super().showEvent(event)
+        QTimer.singleShot(0, self._schedule_load_visible_thumbnails)
+
+    def load_visible_thumbnails(self) -> None:
+        """Start loading thumbnails that are visible in the viewport."""
+        viewport_widget = self.viewport()
+        scroll_bar = self.horizontalScrollBar()
+        count = self.container_layout.count()
+        if viewport_widget is None or scroll_bar is None or count == 0:
+            return
+
+        # Determine the visible index range based on scroll position
+        margins = self.container_layout.contentsMargins()
+        spacing = self.container_layout.spacing()
+        first_item = self.container_layout.itemAt(0)
+        first_widget = first_item.widget() if first_item is not None else None
+        item_width = first_widget.width() if first_widget is not None else 0
+
+        per_item = item_width + spacing
+        if per_item <= 0:
+            return
+
+        scroll_x = scroll_bar.value()
+        viewport_width = viewport_widget.width()
+
+        start = max(0, (scroll_x - margins.left()) // per_item)
+        end = min(count - 1, (scroll_x + viewport_width - margins.left()) // per_item)
+
+        prev_start, prev_end = self._visible_range
+        if start == prev_start and end == prev_end:
+            return
+
+        # Cancel thumbnails that scrolled out of view
+        for i in range(prev_start, prev_end + 1):
+            if i < start or i > end:
+                item = self.container_layout.itemAt(i)
+                if item is not None:
+                    widget = item.widget()
+                    if isinstance(widget, ThumbnailWidget):
+                        widget.cancel_loading()
+
+        # Start loading newly visible thumbnails
+        for i in range(start, end + 1):
+            if i < prev_start or i > prev_end:
+                item = self.container_layout.itemAt(i)
+                if item is not None:
+                    widget = item.widget()
+                    if isinstance(widget, ThumbnailWidget):
+                        widget.start_loading()
+
+        self._visible_range = (start, end)
+
+    def _schedule_load_visible_thumbnails(self) -> None:
+        """Debounce thumbnail loading during rapid scrolling."""
+        self._load_timer.start()
 
 
 class CompressionStatsDialog(QDialog):
