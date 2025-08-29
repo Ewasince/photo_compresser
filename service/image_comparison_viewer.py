@@ -595,7 +595,9 @@ class ThumbnailCarousel(QScrollArea):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWidgetResizable(True)
+        # Allow the container to grow wider than the viewport so thumbnails
+        # keep their intended width even before images load
+        self.setWidgetResizable(False)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setFixedHeight(140)
@@ -606,6 +608,8 @@ class ThumbnailCarousel(QScrollArea):
         self.container_layout = QHBoxLayout(self.container)
         self.container_layout.setContentsMargins(10, 10, 10, 10)
         self.container_layout.setSpacing(10)
+        margins = self.container_layout.contentsMargins()
+        self.container.setFixedHeight(120 + margins.top() + margins.bottom())
 
         self.setWidget(self.container)
 
@@ -634,6 +638,12 @@ class ThumbnailCarousel(QScrollArea):
         thumbnail = ThumbnailWidget(image_pair)
         thumbnail.clicked.connect(self.thumbnail_clicked.emit)
         self.container_layout.addWidget(thumbnail)
+        # Maintain spacing for thumbnails that have not yet loaded
+        margins = self.container_layout.contentsMargins()
+        count = self.container_layout.count()
+        spacing = self.container_layout.spacing()
+        total_width = count * thumbnail.width() + max(0, count - 1) * spacing + margins.left() + margins.right()
+        self.container.setFixedWidth(total_width)
 
     def clear(self) -> None:
         """Clear all thumbnails."""
