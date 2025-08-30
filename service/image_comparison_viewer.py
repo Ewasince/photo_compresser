@@ -969,6 +969,8 @@ class MainWindow(QMainWindow):
         ) = None
         self.profile_info1: dict[str, dict[str, Any]] = {}
         self.profile_info2: dict[str, dict[str, Any]] = {}
+        self.profile_list1: list[dict[str, Any]] = []
+        self.profile_list2: list[dict[str, Any]] = []
 
         self.setup_ui()
         self.setup_connections()
@@ -1098,6 +1100,8 @@ class MainWindow(QMainWindow):
         self.stats_button.setEnabled(False)
         self.profile_info1.clear()
         self.profile_info2.clear()
+        self.profile_list1.clear()
+        self.profile_list2.clear()
         self.profile_label1.clear()
         self.profile_label2.clear()
         self.update_status()
@@ -1137,6 +1141,8 @@ class MainWindow(QMainWindow):
         self.clear_pairs()
         self.profile_info1 = {}
         self.profile_info2 = {p["name"]: p for p in data.get("profiles", [])}
+        self.profile_list1 = []
+        self.profile_list2 = data.get("profiles", [])
         for pair in data.get("image_pairs", []):
             orig = pair.get("original")
             comp = pair.get("compressed")
@@ -1172,11 +1178,14 @@ class MainWindow(QMainWindow):
         profile_map2: dict[str, str] = {}
         self.profile_info1 = {}
         self.profile_info2 = {}
+        self.profile_list1 = []
+        self.profile_list2 = []
         if stats1:
             try:
                 with stats1.open() as f:
                     data = json.load(f)
                 self.profile_info1 = {p["name"]: p for p in data.get("profiles", [])}
+                self.profile_list1 = data.get("profiles", [])
                 for pair in data.get("image_pairs", []):
                     comp = pair.get("compressed")
                     profile = pair.get("profile", "Raw")
@@ -1189,11 +1198,13 @@ class MainWindow(QMainWindow):
                             profile_map1[suffix] = profile
             except Exception:
                 profile_map1 = {}
+                self.profile_list1 = []
         if stats2:
             try:
                 with stats2.open() as f:
                     data = json.load(f)
                 self.profile_info2 = {p["name"]: p for p in data.get("profiles", [])}
+                self.profile_list2 = data.get("profiles", [])
                 for pair in data.get("image_pairs", []):
                     comp = pair.get("compressed")
                     profile = pair.get("profile", "Raw")
@@ -1206,6 +1217,7 @@ class MainWindow(QMainWindow):
                             profile_map2[suffix] = profile
             except Exception:
                 profile_map2 = {}
+                self.profile_list2 = []
 
         for file1 in dir1.rglob("*"):
             if not file1.is_file() or file1.suffix.lower() not in SUPPORTED_EXTENSIONS:
@@ -1294,10 +1306,12 @@ class MainWindow(QMainWindow):
                 text2 = tr("Profile: {profile}").format(profile=profile_name2)
                 self.profile_label1.setText(f"{text1} |")
                 self.profile_label2.setText(text2)
-                info1 = self.profile_info1.get(current_pair.profile1)
-                info2 = self.profile_info2.get(current_pair.profile2)
-                self.profile_label1.setToolTip(self._format_profile_tooltip(info1, current_pair.image1_path))
-                self.profile_label2.setToolTip(self._format_profile_tooltip(info2, current_pair.image2_path))
+                self.profile_label1.setToolTip(
+                    self._format_profile_tooltip(self.profile_list1, current_pair.profile1, current_pair.image1_path)
+                )
+                self.profile_label2.setToolTip(
+                    self._format_profile_tooltip(self.profile_list2, current_pair.profile2, current_pair.image2_path)
+                )
             else:
                 self.status_label.setText(tr("Loaded {count} image pairs").format(count=len(self.image_pairs)))
                 self.profile_label1.clear()
@@ -1307,29 +1321,19 @@ class MainWindow(QMainWindow):
             self.profile_label1.clear()
             self.profile_label2.clear()
 
-    def _format_profile_tooltip(self, profile: dict[str, Any] | None, image_path: str | None) -> str:
-        if not profile:
+    def _format_profile_tooltip(
+        self, profiles: list[dict[str, Any]], selected_name: str, image_path: str | None
+    ) -> str:
+        if not profiles and selected_name == "Raw":
             return tr("Raw")
+
         lines: list[str] = []
-
-        def add(field: str, label_key: str | None = None) -> None:
-            value = profile.get(field)
-            if value is not None:
-                label = tr(label_key or field.replace("_", " ").title())
-                lines.append(f"{label}: {value}")
-
-        add("quality", "Quality")
-        add("max_largest_side", "Max Largest Side")
-        add("max_smallest_side", "Max Smallest Side")
-        add("output_format", "Output Format")
-        for fmt in ("jpeg_params", "webp_params", "avif_params"):
-            params = profile.get(fmt)
-            if params:
-                for key, val in params.items():
-                    label = tr(key.replace("_", " ").title())
-                    lines.append(f"{label}: {val}")
-
-        if image_path and profile.get("conditions"):
+        width = height = 0
+        image_format = ""
+        has_transparency = False
+        file_size: int | None = None
+        exif: dict[str, Any] | None = None
+        if image_path:
             try:
                 path = Path(image_path)
                 file_size = path.stat().st_size if path.exists() else None
@@ -1338,7 +1342,31 @@ class MainWindow(QMainWindow):
                     image_format = (img.format or "").upper()
                     has_transparency = "A" in img.getbands() or "transparency" in img.info
                     exif = {ExifTags.TAGS.get(k, str(k)): v for k, v in img.getexif().items()}
-                conditions = ProfileConditions.from_dict(profile.get("conditions", {}))
+            except Exception:
+                logger.exception("Failed to evaluate profile conditions")
+
+        selected = next((p for p in profiles if p.get("name") == selected_name), None)
+        if selected:
+
+            def add(field: str, label_key: str | None = None) -> None:
+                value = selected.get(field)
+                if value is not None:
+                    label = tr(label_key or field.replace("_", " ").title())
+                    lines.append(f"{label}: {value}")
+
+            add("quality", "Quality")
+            add("max_largest_side", "Max Largest Side")
+            add("max_smallest_side", "Max Smallest Side")
+            add("output_format", "Output Format")
+            for fmt in ("jpeg_params", "webp_params", "avif_params"):
+                params = selected.get(fmt)
+                if params:
+                    for key, val in params.items():
+                        label = tr(key.replace("_", " ").title())
+                        lines.append(f"{label}: {val}")
+
+            if image_path and selected.get("conditions"):
+                conditions = ProfileConditions.from_dict(selected.get("conditions", {}))
                 evaluations = conditions.evaluate(
                     width,
                     height,
@@ -1362,8 +1390,39 @@ class MainWindow(QMainWindow):
                             cond_repr = str(expected)
                         symbol = "✓" if ok else "✗"
                         lines.append(f"{label} {cond_repr}: {symbol}")
-            except Exception:
-                logger.exception("Failed to evaluate profile conditions")
+        else:
+            lines.append(tr("Raw"))
+
+        if image_path:
+            for profile in reversed(profiles):
+                name = profile.get("name", "")
+                if name == selected_name:
+                    break
+                conditions = ProfileConditions.from_dict(profile.get("conditions", {}))
+                evaluations = conditions.evaluate(
+                    width,
+                    height,
+                    image_format=image_format,
+                    has_transparency=has_transparency,
+                    file_size=file_size,
+                    exif=exif,
+                )
+                lines.append("")
+                lines.append(tr("Profile: {profile}").format(profile=name))
+                if evaluations:
+                    lines.append(tr("Conditions") + ":")
+                    for field, (expected, ok) in evaluations.items():
+                        label = tr(field.replace("_", " ").title())
+                        if isinstance(expected, NumericCondition):
+                            cond_repr = f"{expected.op} {expected.value}"
+                        elif isinstance(expected, list):
+                            cond_repr = ", ".join(str(v) for v in expected)
+                        elif isinstance(expected, dict):
+                            cond_repr = ", ".join(f"{k}={v}" for k, v in expected.items())
+                        else:
+                            cond_repr = str(expected)
+                        symbol = "✓" if ok else "✗"
+                        lines.append(f"{label} {cond_repr}: {symbol}")
 
         return "\n".join(lines)
 
