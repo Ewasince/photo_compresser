@@ -4,6 +4,7 @@ Image Compression Application
 Main application for compressing images with configurable parameters.
 """
 
+import json
 import sys
 from dataclasses import asdict
 from datetime import datetime
@@ -35,8 +36,8 @@ from PySide6.QtWidgets import (
 
 from service.compression_profiles import (
     CompressionProfile,
-    load_profiles,
-    save_profiles,
+    VideoCompressionProfile,
+    VideoProfileConditions,
 )
 from service.file_utils import format_timedelta
 
@@ -46,9 +47,11 @@ from service.image_compression import (
     create_image_pairs,
     save_compression_settings,
 )
-from service.parameters_defaults import GLOBAL_DEFAULTS
+from service.parameters_defaults import GLOBAL_DEFAULTS, VIDEO_DEFAULTS
 from service.profile_panel import ProfilePanel
 from service.translator import LANGUAGES, get_language, set_language, tr
+from service.video_compression import VideoCompressor
+from service.video_profile_panel import VideoProfilePanel
 
 
 class CompressionWorker(QThread):
@@ -63,17 +66,21 @@ class CompressionWorker(QThread):
     def __init__(
         self,
         compressor: ImageCompressor,
+        video_compressor: VideoCompressor,
         input_dir: Path,
         output_dir: Path,
         compression_settings: dict,
-        profiles: list[CompressionProfile],
+        image_profiles: list[CompressionProfile],
+        video_profiles: list[VideoCompressionProfile],
     ) -> None:
         super().__init__()
         self.compressor = compressor
+        self.video_compressor = video_compressor
         self.input_dir = input_dir
         self.output_dir = output_dir
         self.compression_settings = compression_settings
-        self.profiles = profiles
+        self.image_profiles = image_profiles
+        self.video_profiles = video_profiles
         self._stop_event = Event()
         self.cancelled = False
 
@@ -83,17 +90,43 @@ class CompressionWorker(QThread):
             self.status_updated.emit(tr("Starting compression..."))
             start_time = datetime.now()
 
-            # Process the directory
-            total_files, compressed_files, compressed_paths, failed_files = self.compressor.process_directory(
-                self.input_dir,
-                self.output_dir,
-                self.profiles,
-                progress_callback=lambda current, total: self.progress_updated.emit(current, total),
-                status_callback=lambda msg: self.status_updated.emit(msg),
-                log_callback=lambda msg: self.log_updated.emit(msg),
-                num_workers=1,
-                stop_event=self._stop_event,
-            )
+            total_files = 0
+            compressed_files = 0
+            compressed_paths: list[Path] = []
+            failed_files: list[Path] = []
+
+            if self.image_profiles:
+                img_total, img_compressed, img_paths, img_failed = self.compressor.process_directory(
+                    self.input_dir,
+                    self.output_dir,
+                    self.image_profiles,
+                    progress_callback=lambda current, total: self.progress_updated.emit(current, total),
+                    status_callback=lambda msg: self.status_updated.emit(msg),
+                    log_callback=lambda msg: self.log_updated.emit(msg),
+                    num_workers=1,
+                    stop_event=self._stop_event,
+                )
+                total_files += img_total
+                compressed_files += img_compressed
+                compressed_paths.extend(img_paths)
+                failed_files.extend(img_failed)
+
+            if self.video_profiles and not self._stop_event.is_set():
+                vid_total, vid_compressed, vid_paths, vid_failed = self.video_compressor.process_directory(
+                    self.input_dir,
+                    self.output_dir,
+                    self.video_profiles,
+                    progress_callback=lambda current, total: self.progress_updated.emit(
+                        current + compressed_files, total + total_files
+                    ),
+                    status_callback=lambda msg: self.status_updated.emit(msg),
+                    log_callback=lambda msg: self.log_updated.emit(msg),
+                    stop_event=self._stop_event,
+                )
+                total_files += vid_total
+                compressed_files += vid_compressed
+                compressed_paths.extend(vid_paths)
+                failed_files.extend(vid_failed)
 
             # Get compression statistics
             stats = self.compressor.get_compression_stats(
@@ -322,9 +355,13 @@ class MainWindow(QMainWindow):
         self.load_profiles_btn.clicked.connect(self.load_profiles)
         header_layout.addWidget(self.load_profiles_btn)
 
-        self.add_profile_btn = QPushButton(tr("Add Profile"))
+        self.add_profile_btn = QPushButton(tr("Add Photo Profile"))
         self.add_profile_btn.clicked.connect(self.add_profile_panel)
         header_layout.addWidget(self.add_profile_btn)
+
+        self.add_video_profile_btn = QPushButton(tr("Add Video Profile"))
+        self.add_video_profile_btn.clicked.connect(self.add_video_profile_panel)
+        header_layout.addWidget(self.add_video_profile_btn)
 
         self.reset_btn = QPushButton(tr("Reset Settings"))
         self.reset_btn.setStyleSheet("""
@@ -350,7 +387,9 @@ class MainWindow(QMainWindow):
         self.settings_layout.addLayout(self.profiles_layout)
 
         self.profile_panels: list[ProfilePanel] = []
+        self.video_profile_panels: list[VideoProfilePanel] = []
         self.add_profile_panel()
+        self.add_video_profile_panel()
 
         scroll_area.setWidget(self.settings_container)
         main_layout.addWidget(scroll_area)
@@ -538,10 +577,14 @@ class MainWindow(QMainWindow):
 
     def reset_settings(self) -> None:
         """Reset all compression settings to their default values."""
-        for panel in self.profile_panels:
-            panel.setParent(None)
+        for p in self.profile_panels:
+            p.setParent(None)
+        for vp in self.video_profile_panels:
+            vp.setParent(None)
         self.profile_panels.clear()
+        self.video_profile_panels.clear()
         self.add_profile_panel()
+        self.add_video_profile_panel()
         self.preserve_structure_cb.setChecked(GLOBAL_DEFAULTS["preserve_structure"])
         self.copy_unsupported_cb.setChecked(GLOBAL_DEFAULTS["copy_unsupported"])
         self.log_message(tr("Compression settings reset to defaults"))
@@ -599,9 +642,23 @@ class MainWindow(QMainWindow):
         title = (
             tr("Default") if not self.profile_panels else tr("Profile {num}").format(num=len(self.profile_panels) + 1)
         )
-        panel = ProfilePanel(title, allow_conditions=allow_conditions, removable=allow_conditions)
+        panel = ProfilePanel(title, allow_conditions=allow_conditions, removable=True)
         panel.remove_requested.connect(lambda p=panel: self.remove_profile_panel(p))
         self.profile_panels.append(panel)
+        self.profiles_layout.addWidget(panel)
+        if profile:
+            panel.apply_profile(profile)
+
+    def add_video_profile_panel(self, profile: VideoCompressionProfile | None = None) -> None:
+        allow_conditions = len(self.video_profile_panels) > 0
+        title = (
+            tr("Default Video")
+            if not self.video_profile_panels
+            else tr("Video Profile {num}").format(num=len(self.video_profile_panels) + 1)
+        )
+        panel = VideoProfilePanel(title, allow_conditions=allow_conditions, removable=True)
+        panel.remove_requested.connect(lambda p=panel: self.remove_video_profile_panel(p))
+        self.video_profile_panels.append(panel)
         self.profiles_layout.addWidget(panel)
         if profile:
             panel.apply_profile(profile)
@@ -610,28 +667,66 @@ class MainWindow(QMainWindow):
         file_name, _ = QFileDialog.getSaveFileName(self, tr("Save Profiles"), "profiles.json", "JSON Files (*.json)")
         if not file_name:
             return
-        profiles = [panel.to_profile() for panel in self.profile_panels]
-        save_profiles(profiles, Path(file_name))
-        self.log_message(tr("Saved {count} profiles to {file}").format(count=len(profiles), file=file_name))
+        image_profiles = [panel.to_profile() for panel in self.profile_panels]
+        video_profiles = [panel.to_profile() for panel in self.video_profile_panels]
+        data = {
+            "images": [asdict(p) for p in image_profiles],
+            "videos": [asdict(p) for p in video_profiles],
+        }
+        Path(file_name).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        self.log_message(
+            tr("Saved {count} profiles to {file}").format(
+                count=len(image_profiles) + len(video_profiles), file=file_name
+            )
+        )
 
     def load_profiles(self) -> None:
         file_name, _ = QFileDialog.getOpenFileName(self, tr("Load Profiles"), "", "JSON Files (*.json)")
         if not file_name:
             return
-        profiles = load_profiles(Path(file_name))
-        if not profiles:
-            QMessageBox.warning(self, tr("Warning"), tr("No profiles found in file."))
-            return
-        for panel in self.profile_panels:
-            panel.setParent(None)
+        data = json.loads(Path(file_name).read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            image_profiles = [CompressionProfile(**item) for item in data]
+            video_profiles = []
+        else:
+            image_profiles = [CompressionProfile(**p) for p in data.get("images", [])]
+            video_profiles = [
+                VideoCompressionProfile(
+                    name=item["name"],
+                    bitrate=item.get("bitrate"),
+                    max_width=item.get("max_width"),
+                    max_height=item.get("max_height"),
+                    output_format=item.get("output_format", "mp4"),
+                    codec=item.get("codec", "libx264"),
+                    advanced_params=item.get("advanced_params", {}),
+                    conditions=VideoProfileConditions.from_dict(item.get("conditions", {})),
+                )
+                for item in data.get("videos", [])
+            ]
+        for p in self.profile_panels:
+            p.setParent(None)
+        for vp in self.video_profile_panels:
+            vp.setParent(None)
         self.profile_panels.clear()
-        for profile in profiles:
+        self.video_profile_panels.clear()
+        for profile in image_profiles:
             self.add_profile_panel(profile)
-        self.log_message(tr("Loaded {count} profiles from {file}").format(count=len(profiles), file=file_name))
+        for vprofile in video_profiles:
+            self.add_video_profile_panel(vprofile)
+        self.log_message(
+            tr("Loaded {count} profiles from {file}").format(
+                count=len(image_profiles) + len(video_profiles), file=file_name
+            )
+        )
 
     def remove_profile_panel(self, panel: ProfilePanel) -> None:
         if panel in self.profile_panels:
             self.profile_panels.remove(panel)
+            panel.setParent(None)
+
+    def remove_video_profile_panel(self, panel: VideoProfilePanel) -> None:
+        if panel in self.video_profile_panels:
+            self.video_profile_panels.remove(panel)
             panel.setParent(None)
 
     def start_compression(self) -> None:
@@ -665,27 +760,40 @@ class MainWindow(QMainWindow):
             )
             return
 
-        profiles = [panel.to_profile() for panel in self.profile_panels]
-        default_profile = profiles[0]
+        image_profiles = [panel.to_profile() for panel in self.profile_panels]
+        video_profiles = [panel.to_profile() for panel in self.video_profile_panels]
+
+        if not image_profiles and not video_profiles:
+            QMessageBox.warning(self, tr("Warning"), tr("No profiles configured."))
+            return
 
         preserve_structure = self.preserve_structure_cb.isChecked()
         copy_unsupported = self.copy_unsupported_cb.isChecked()
+
         compressor = ImageCompressor(
-            quality=default_profile.quality,
-            max_largest_side=default_profile.max_largest_side,
-            max_smallest_side=default_profile.max_smallest_side,
             preserve_structure=preserve_structure,
             copy_unsupported=copy_unsupported,
-            output_format=default_profile.output_format,
         )
-        compressor.set_jpeg_parameters(**default_profile.jpeg_params)
-        compressor.set_webp_parameters(**default_profile.webp_params)
-        compressor.set_avif_parameters(**default_profile.avif_params)
+        if image_profiles:
+            default_profile = image_profiles[0]
+            compressor.apply_profile(default_profile)
+
+        video_compressor = VideoCompressor(
+            bitrate=f"{VIDEO_DEFAULTS['bitrate']}k",
+            max_width=VIDEO_DEFAULTS["max_width"],
+            max_height=VIDEO_DEFAULTS["max_height"],
+            output_format=VIDEO_DEFAULTS["output_format"],
+            preserve_structure=preserve_structure,
+            copy_unsupported=copy_unsupported,
+        )
+        if video_profiles:
+            video_compressor.apply_profile(video_profiles[0])
 
         compression_settings = {
             "input_directory": str(self.input_directory),
             "output_directory": str(self.output_directory),
-            "profiles": [asdict(p) for p in profiles],
+            "image_profiles": [asdict(p) for p in image_profiles],
+            "video_profiles": [asdict(p) for p in video_profiles],
             "preserve_structure": preserve_structure,
             "copy_unsupported": copy_unsupported,
         }
@@ -694,10 +802,12 @@ class MainWindow(QMainWindow):
         assert self.output_directory is not None
         self.compression_worker = CompressionWorker(
             compressor,
+            video_compressor,
             self.input_directory,
             self.output_directory,
             compression_settings,
-            profiles,
+            image_profiles,
+            video_profiles,
         )
         self.compression_worker.progress_updated.connect(self.update_progress)
         self.compression_worker.status_updated.connect(self.update_status)

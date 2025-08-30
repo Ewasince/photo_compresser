@@ -107,7 +107,7 @@ class ProfilePanel(QWidget):
 
         # Profile name and remove button
         name_layout = QHBoxLayout()
-        self.name_label = QLabel(tr("Name") + ":")
+        self.name_label = QLabel("🖼️ " + tr("Name") + ":")
         name_layout.addWidget(self.name_label)
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText(self.title)

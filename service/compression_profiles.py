@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
@@ -175,6 +176,174 @@ def select_profile(
             has_transparency=has_transparency,
             file_size=file_size,
             exif=exif,
+        ):
+            return profile
+    return None
+
+
+# --- Video profile support -------------------------------------------------
+
+
+@dataclass(slots=True)
+class VideoProfileConditions:
+    """Conditions for selecting a video compression profile."""
+
+    width: NumericCondition | None = None
+    height: NumericCondition | None = None
+    duration: NumericCondition | None = None
+    frame_rate: NumericCondition | None = None
+    input_formats: list[str] | None = None
+    file_size: NumericCondition | None = None
+
+    @staticmethod
+    def _match(cond: NumericCondition | None, actual: float | None) -> bool:
+        if cond is None:
+            return True
+        if actual is None:
+            return False
+        return {
+            "<": actual < cond.value,
+            "<=": actual <= cond.value,
+            ">": actual > cond.value,
+            ">=": actual >= cond.value,
+            "==": actual == cond.value,
+        }.get(cond.op, False)
+
+    def matches(
+        self,
+        *,
+        width: int,
+        height: int,
+        duration: float | None = None,
+        frame_rate: float | None = None,
+        video_format: str | None = None,
+        file_size: int | None = None,
+    ) -> bool:
+        conditions = [
+            self._match(self.width, width),
+            self._match(self.height, height),
+            self._match(self.duration, duration),
+            self._match(self.frame_rate, frame_rate),
+            self.input_formats is None
+            or (video_format is not None and video_format.upper() in [f.upper() for f in self.input_formats]),
+            self._match(self.file_size, file_size),
+        ]
+        return all(conditions)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> VideoProfileConditions:
+        def _nc(key: str) -> NumericCondition | None:
+            val = data.get(key)
+            return NumericCondition(**val) if isinstance(val, dict) else None
+
+        return cls(
+            width=_nc("width"),
+            height=_nc("height"),
+            duration=_nc("duration"),
+            frame_rate=_nc("frame_rate"),
+            input_formats=data.get("input_formats"),
+            file_size=_nc("file_size"),
+        )
+
+
+@dataclass(slots=True)
+class VideoCompressionProfile:
+    """Compression settings for videos with optional selection conditions."""
+
+    name: str
+    bitrate: str | None = None
+    max_width: int | None = None
+    max_height: int | None = None
+    output_format: str = "mp4"
+    codec: str = "libx264"
+    advanced_params: dict[str, Any] = field(default_factory=dict)
+    conditions: VideoProfileConditions = field(default_factory=VideoProfileConditions)
+
+
+def save_video_profiles(profiles: Sequence[VideoCompressionProfile], file_path: Path) -> Path:
+    """Save video compression profiles to ``file_path``."""
+
+    data = [asdict(profile) for profile in profiles]
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    return file_path
+
+
+def load_video_profiles(file_path: Path) -> list[VideoCompressionProfile]:
+    """Load video compression profiles from ``file_path``."""
+
+    if not file_path.exists():
+        return []
+    raw = json.loads(file_path.read_text(encoding="utf-8"))
+    profiles: list[VideoCompressionProfile] = []
+    for item in raw:
+        cond = VideoProfileConditions.from_dict(item.get("conditions", {}))
+        profile = VideoCompressionProfile(
+            name=item["name"],
+            bitrate=item.get("bitrate"),
+            max_width=item.get("max_width"),
+            max_height=item.get("max_height"),
+            output_format=item.get("output_format", "mp4"),
+            codec=item.get("codec", "libx264"),
+            advanced_params=item.get("advanced_params", {}),
+            conditions=cond,
+        )
+        profiles.append(profile)
+    return profiles
+
+
+def _probe_video(path: Path) -> dict[str, Any]:
+    """Return basic video information using ``ffprobe``."""
+
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height,avg_frame_rate",
+        "-show_entries",
+        "format=duration,size",
+        "-of",
+        "json",
+        str(path),
+    ]
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)  # noqa: S603
+    data = json.loads(result.stdout or "{}")
+    stream = data.get("streams", [{}])[0]
+    fmt = data.get("format", {})
+    width = int(stream.get("width", 0))
+    height = int(stream.get("height", 0))
+    duration = float(fmt.get("duration", 0)) if fmt.get("duration") else None
+    size = int(fmt.get("size", 0)) if fmt.get("size") else None
+    fr_str = stream.get("avg_frame_rate", "0/0")
+    num, den = fr_str.split("/")
+    frame_rate = float(num) / float(den) if den != "0" else None
+    return {
+        "width": width,
+        "height": height,
+        "duration": duration,
+        "frame_rate": frame_rate,
+        "size": size,
+    }
+
+
+def select_video_profile(
+    path: Path | str, profiles: Sequence[VideoCompressionProfile]
+) -> VideoCompressionProfile | None:
+    """Return the first video profile whose conditions match the video."""
+
+    info = _probe_video(Path(path))
+    extension = Path(path).suffix.lstrip(".").upper()
+    for profile in reversed(profiles):
+        if profile.conditions.matches(
+            width=info["width"],
+            height=info["height"],
+            duration=info["duration"],
+            frame_rate=info["frame_rate"],
+            video_format=extension,
+            file_size=info["size"],
         ):
             return profile
     return None
