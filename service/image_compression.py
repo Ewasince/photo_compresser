@@ -39,6 +39,7 @@ class ImageCompressor:
         max_smallest_side: int | None = 1080,
         preserve_structure: bool = True,
         copy_unsupported: bool = True,
+        unsupported_dir: Path | None = None,
         output_format: str = "JPEG",
         num_workers: int = os.cpu_count() or 1,
     ):
@@ -51,6 +52,7 @@ class ImageCompressor:
             max_smallest_side: Maximum size of the smallest side in pixels. If None, no limit.
             preserve_structure: Whether to preserve folder structure
             copy_unsupported: Whether to copy unsupported files
+            unsupported_dir: Optional directory for unsupported files
             output_format: Output format ('JPEG', 'WebP', 'AVIF')
             num_workers: Number of worker threads for parallel processing.
                 Defaults to the number of CPU cores.
@@ -60,6 +62,7 @@ class ImageCompressor:
         self.max_smallest_side = max_smallest_side
         self.preserve_structure = preserve_structure
         self.copy_unsupported = copy_unsupported
+        self.unsupported_dir = unsupported_dir
         self.output_format = output_format.upper()
         self.num_workers = max(1, num_workers)
 
@@ -316,6 +319,7 @@ class ImageCompressor:
 
         tasks: list[Path] = []
         used_names: set[Path] = set()
+        unsupported_used_names: set[Path] = set()
 
         def _clone_with_profile(profile: CompressionProfile | None) -> "ImageCompressor":
             clone = ImageCompressor(
@@ -324,6 +328,7 @@ class ImageCompressor:
                 max_smallest_side=self.max_smallest_side,
                 preserve_structure=self.preserve_structure,
                 copy_unsupported=self.copy_unsupported,
+                unsupported_dir=self.unsupported_dir,
                 output_format=self.output_format,
             )
             clone.set_jpeg_parameters(**self.jpeg_params)
@@ -346,16 +351,18 @@ class ImageCompressor:
                 tasks.append(file_path)
             else:
                 if self.copy_unsupported:
+                    target_root = self.unsupported_dir or output_root
+                    used_set = used_names if target_root == output_root else unsupported_used_names
                     if self.preserve_structure:
                         rel_path = file_path.relative_to(input_root)
-                        output_file = output_root / rel_path
+                        output_file = target_root / rel_path
                     else:
-                        output_file = output_root / file_path.name
+                        output_file = target_root / file_path.name
                         counter = 1
-                        while output_file in used_names or output_file.exists():
-                            output_file = output_root / f"{file_path.stem}_{counter}{file_path.suffix}"
+                        while output_file in used_set or output_file.exists():
+                            output_file = target_root / f"{file_path.stem}_{counter}{file_path.suffix}"
                             counter += 1
-                        used_names.add(output_file)
+                        used_set.add(output_file)
 
                     output_file.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(file_path, output_file)

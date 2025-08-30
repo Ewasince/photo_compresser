@@ -700,6 +700,8 @@ class CompressionStatsDialog(QDialog):
             "tile_cols": "Tile Cols",
             "preserve_structure": "Preserve folder structure",
             "copy_unsupported": "Copy unsupported files",
+            "copy_unsupported_to_dir": "Copy unsupported files to separate folder",
+            "unsupported_dir": "Unsupported files directory",
         }
 
         def format_param_value(key: str, value: Any) -> str:
@@ -737,6 +739,8 @@ class CompressionStatsDialog(QDialog):
 
         add_global_row("preserve_structure")
         add_global_row("copy_unsupported")
+        add_global_row("copy_unsupported_to_dir")
+        add_global_row("unsupported_dir")
 
         profiles1 = settings1.get("profiles", [])
         profiles2 = settings2.get("profiles", [])

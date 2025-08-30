@@ -294,7 +294,25 @@ class MainWindow(QMainWindow):
 
         self.copy_unsupported_cb = QCheckBox(tr("Copy unsupported files"))
         self.copy_unsupported_cb.setChecked(GLOBAL_DEFAULTS["copy_unsupported"])
+        self.copy_unsupported_cb.stateChanged.connect(self.update_copy_unsupported_state)
         input_layout.addWidget(self.copy_unsupported_cb)
+
+        self.copy_unsupported_separate_cb = QCheckBox(tr("Copy unsupported files to separate folder"))
+        self.copy_unsupported_separate_cb.setChecked(GLOBAL_DEFAULTS["copy_unsupported_to_dir"])
+        self.copy_unsupported_separate_cb.stateChanged.connect(self.update_copy_unsupported_state)
+        input_layout.addWidget(self.copy_unsupported_separate_cb)
+
+        unsupported_dir_layout = QHBoxLayout()
+        self.unsupported_dir_edit = QLineEdit()
+        self.unsupported_dir_edit.setVisible(False)
+        self.select_unsupported_btn = QPushButton(tr("Select Unsupported Directory"))
+        self.select_unsupported_btn.clicked.connect(self.select_unsupported_directory)
+        self.select_unsupported_btn.setVisible(False)
+        unsupported_dir_layout.addWidget(self.unsupported_dir_edit, 1)
+        unsupported_dir_layout.addWidget(self.select_unsupported_btn)
+        input_layout.addLayout(unsupported_dir_layout)
+
+        self.update_copy_unsupported_state()
 
         main_layout.addWidget(self.input_group)
 
@@ -505,6 +523,8 @@ class MainWindow(QMainWindow):
         self.select_output_btn.setText(tr("Select Output Directory"))
         self.preserve_structure_cb.setText(tr("Preserve folder structure"))
         self.copy_unsupported_cb.setText(tr("Copy unsupported files"))
+        self.copy_unsupported_separate_cb.setText(tr("Copy unsupported files to separate folder"))
+        self.select_unsupported_btn.setText(tr("Select Unsupported Directory"))
         self.save_profiles_btn.setText(tr("Save Profiles"))
         self.load_profiles_btn.setText(tr("Load Profiles"))
         self.add_profile_btn.setText(tr("Add Profile"))
@@ -545,6 +565,9 @@ class MainWindow(QMainWindow):
         self.add_profile_panel()
         self.preserve_structure_cb.setChecked(GLOBAL_DEFAULTS["preserve_structure"])
         self.copy_unsupported_cb.setChecked(GLOBAL_DEFAULTS["copy_unsupported"])
+        self.copy_unsupported_separate_cb.setChecked(GLOBAL_DEFAULTS["copy_unsupported_to_dir"])
+        self.unsupported_dir_edit.clear()
+        self.update_copy_unsupported_state()
         self.log_message(tr("Compression settings reset to defaults"))
 
     def select_output_directory(self) -> None:
@@ -558,6 +581,25 @@ class MainWindow(QMainWindow):
             self.output_directory = Path(directory)
             self.output_dir_edit.setText(str(self.output_directory))
             self.log_message(tr("Selected output directory: {path}").format(path=self.output_directory))
+            self.update_copy_unsupported_state()
+
+    def select_unsupported_directory(self) -> None:
+        initial_dir = str(self.output_directory.parent) if self.output_directory else ""
+        directory = QFileDialog.getExistingDirectory(
+            self, tr("Select Unsupported Directory"), initial_dir, QFileDialog.Option.ShowDirsOnly
+        )
+        if directory:
+            self.unsupported_dir_edit.setText(directory)
+            self.log_message(tr("Selected unsupported directory: {path}").format(path=directory))
+
+    def update_copy_unsupported_state(self) -> None:
+        enabled = self.copy_unsupported_cb.isChecked()
+        self.copy_unsupported_separate_cb.setEnabled(enabled)
+        separate = enabled and self.copy_unsupported_separate_cb.isChecked()
+        self.unsupported_dir_edit.setVisible(separate)
+        self.select_unsupported_btn.setVisible(separate)
+        if separate and not self.unsupported_dir_edit.text() and self.output_directory is not None:
+            self.unsupported_dir_edit.setText(str(self.generate_unsupported_directory()))
 
     def update_input_directory_from_text(self, text: str) -> None:
         """Update stored input directory when text changes."""
@@ -577,6 +619,16 @@ class MainWindow(QMainWindow):
         """Update stored output directory when text changes."""
         self.output_directory = Path(text) if text else None
 
+    def generate_unsupported_directory(self) -> Path:
+        assert self.output_directory is not None
+        suffix = tr("not_proceed")
+        candidate = self.output_directory.parent / f"{self.output_directory.name}_{suffix}"
+        counter = 1
+        while candidate.exists():
+            candidate = candidate.parent / f"{self.output_directory.name}_{suffix}_{counter}"
+            counter += 1
+        return candidate
+
     def generate_output_directory(self) -> Path:
         assert self.input_directory is not None
         base = f"{self.input_directory.name}_compressed_{datetime.now().strftime('%Y.%m.%d %H%M%S')}"
@@ -594,6 +646,7 @@ class MainWindow(QMainWindow):
         self.output_directory = self.generate_output_directory()
         self.output_dir_edit.setText(str(self.output_directory))
         self.log_message(tr("Regenerated output directory: {path}").format(path=self.output_directory))
+        self.update_copy_unsupported_state()
 
     def add_profile_panel(self, profile: CompressionProfile | None = None) -> None:
         allow_conditions = len(self.profile_panels) > 0
@@ -671,12 +724,19 @@ class MainWindow(QMainWindow):
 
         preserve_structure = self.preserve_structure_cb.isChecked()
         copy_unsupported = self.copy_unsupported_cb.isChecked()
+        copy_unsupported_to_dir = self.copy_unsupported_separate_cb.isChecked()
+        unsupported_dir = (
+            Path(self.unsupported_dir_edit.text())
+            if copy_unsupported and copy_unsupported_to_dir and self.unsupported_dir_edit.text()
+            else None
+        )
         compressor = ImageCompressor(
             quality=default_profile.quality,
             max_largest_side=default_profile.max_largest_side,
             max_smallest_side=default_profile.max_smallest_side,
             preserve_structure=preserve_structure,
             copy_unsupported=copy_unsupported,
+            unsupported_dir=unsupported_dir,
             output_format=default_profile.output_format,
         )
         compressor.set_jpeg_parameters(**default_profile.jpeg_params)
@@ -689,6 +749,8 @@ class MainWindow(QMainWindow):
             "profiles": [asdict(p) for p in profiles],
             "preserve_structure": preserve_structure,
             "copy_unsupported": copy_unsupported,
+            "copy_unsupported_to_dir": copy_unsupported_to_dir,
+            "unsupported_dir": str(unsupported_dir) if unsupported_dir else "",
         }
 
         # Create and start worker thread

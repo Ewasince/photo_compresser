@@ -52,11 +52,13 @@ BASIC_DEFAULTS: BasicDefaults = {
 class GlobalDefaults(TypedDict):
     preserve_structure: bool
     copy_unsupported: bool
+    copy_unsupported_to_dir: bool
 
 
 GLOBAL_DEFAULTS: GlobalDefaults = {
     "preserve_structure": True,
     "copy_unsupported": True,
+    "copy_unsupported_to_dir": False,
 }
 
 JPEG_DEFAULTS: JpegDefaults = {
