@@ -1163,8 +1163,8 @@ class MainWindow(QMainWindow):
         stats1: Path | None = stats1_file if stats1_file.exists() else None
         stats2: Path | None = stats2_file if stats2_file.exists() else None
 
-        profile_map1: dict[Path, str] = {}
-        profile_map2: dict[Path, str] = {}
+        profile_map1: dict[str, str] = {}
+        profile_map2: dict[str, str] = {}
         self.profile_info1 = {}
         self.profile_info2 = {}
         if stats1:
@@ -1176,7 +1176,12 @@ class MainWindow(QMainWindow):
                     comp = pair.get("compressed")
                     profile = pair.get("profile", "Raw")
                     if comp:
-                        profile_map1[Path(comp).resolve()] = profile
+                        comp_path = Path(comp)
+                        parts = comp_path.parts
+                        start = 1 if comp_path.is_absolute() else 0
+                        for i in range(start, len(parts)):
+                            suffix = Path(*parts[i:]).as_posix()
+                            profile_map1[suffix] = profile
             except Exception:
                 profile_map1 = {}
         if stats2:
@@ -1188,7 +1193,12 @@ class MainWindow(QMainWindow):
                     comp = pair.get("compressed")
                     profile = pair.get("profile", "Raw")
                     if comp:
-                        profile_map2[Path(comp).resolve()] = profile
+                        comp_path = Path(comp)
+                        parts = comp_path.parts
+                        start = 1 if comp_path.is_absolute() else 0
+                        for i in range(start, len(parts)):
+                            suffix = Path(*parts[i:]).as_posix()
+                            profile_map2[suffix] = profile
             except Exception:
                 profile_map2 = {}
 
@@ -1205,8 +1215,9 @@ class MainWindow(QMainWindow):
                         break
             if file2.exists():
                 pair_name = rel.as_posix()
-                profile1 = profile_map1.get(file1.resolve(), "Raw")
-                profile2 = profile_map2.get(file2.resolve(), "Raw")
+                profile_key = pair_name
+                profile1 = profile_map1.get(profile_key, "Raw")
+                profile2 = profile_map2.get(profile_key, "Raw")
                 image_pair = ImagePair(str(file1), str(file2), pair_name, profile1, profile2)
                 self.image_pairs.append(image_pair)
                 self.carousel.add_image_pair(image_pair)
