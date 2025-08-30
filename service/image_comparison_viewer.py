@@ -1121,7 +1121,8 @@ class MainWindow(QMainWindow):
             comp = pair.get("compressed")
             if orig and comp:
                 name = pair.get("original_name", Path(orig).name)
-                image_pair = ImagePair(orig, comp, name)
+                profile = pair.get("profile", "Raw")
+                image_pair = ImagePair(orig, comp, name, profile)
                 self.image_pairs.append(image_pair)
                 self.carousel.add_image_pair(image_pair)
         self._preload_thumbnails()
@@ -1146,6 +1147,19 @@ class MainWindow(QMainWindow):
         stats1: Path | None = stats1_file if stats1_file.exists() else None
         stats2: Path | None = stats2_file if stats2_file.exists() else None
 
+        profile_map: dict[Path, str] = {}
+        if stats1:
+            try:
+                with stats1.open() as f:
+                    data = json.load(f)
+                for pair in data.get("image_pairs", []):
+                    comp = pair.get("compressed")
+                    profile = pair.get("profile", "Raw")
+                    if comp:
+                        profile_map[Path(comp).resolve()] = profile
+            except Exception:
+                profile_map = {}
+
         for file1 in dir1.rglob("*"):
             if not file1.is_file() or file1.suffix.lower() not in SUPPORTED_EXTENSIONS:
                 continue
@@ -1159,7 +1173,8 @@ class MainWindow(QMainWindow):
                         break
             if file2.exists():
                 pair_name = rel.as_posix()
-                image_pair = ImagePair(str(file1), str(file2), pair_name)
+                profile = profile_map.get(file1.resolve(), "Raw")
+                image_pair = ImagePair(str(file1), str(file2), pair_name, profile)
                 self.image_pairs.append(image_pair)
                 self.carousel.add_image_pair(image_pair)
 
@@ -1217,13 +1232,14 @@ class MainWindow(QMainWindow):
         if self.image_pairs:
             current_pair = self.image_pairs[self.current_pair_index] if self.current_pair_index >= 0 else None
             if current_pair:
-                self.status_label.setText(
-                    tr("Showing: {name} ({index}/{total})").format(
-                        name=current_pair.name,
-                        index=self.current_pair_index + 1,
-                        total=len(self.image_pairs),
-                    )
+                profile_name = tr("Raw") if current_pair.profile == "Raw" else current_pair.profile
+                status = tr("Showing: {name} ({index}/{total})").format(
+                    name=current_pair.name,
+                    index=self.current_pair_index + 1,
+                    total=len(self.image_pairs),
                 )
+                profile_text = tr("Profile: {profile}").format(profile=profile_name)
+                self.status_label.setText(f"{status} - {profile_text}")
             else:
                 self.status_label.setText(tr("Loaded {count} image pairs").format(count=len(self.image_pairs)))
         else:

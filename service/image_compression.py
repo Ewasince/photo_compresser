@@ -71,6 +71,9 @@ class ImageCompressor:
         self.webp_params: dict[str, Any] = {}
         self.avif_params: dict[str, Any] = {}
 
+        # Store profile names used for the last ``process_directory`` run
+        self.last_profile_map: dict[Path, str] = {}
+
     def apply_profile(self, profile: CompressionProfile) -> None:
         """Apply settings from a compression profile to this compressor."""
         self.quality = profile.quality
@@ -306,6 +309,7 @@ class ImageCompressor:
         compressed_files = 0
         compressed_paths: list[Path] = []
         failed_files: list[tuple[Path, str]] = []
+        profile_map: dict[Path, str] = {}
 
         if progress_callback:
             progress_callback(0, total_files)
@@ -396,13 +400,13 @@ class ImageCompressor:
                             used_names.add(output_file)
 
                     saved, error = comp.compress_image(src, output_file, img)
-                    profile_name = profile.name if profile else tr("Default")
+                    profile_name = profile.name if profile else tr("Raw")
                 if saved:
                     copy_times_from_src(src, saved)
                 return saved, src, profile_name, error
             except Exception as e:  # Handle errors opening the image
                 logger.exception(f"Error processing {src}: {e}")
-                return None, src, tr("Default"), str(e)
+                return None, src, tr("Raw"), str(e)
 
         if worker_count > 1:
             with ThreadPoolExecutor(max_workers=worker_count) as executor:
@@ -415,6 +419,7 @@ class ImageCompressor:
                     if saved_path:
                         compressed_files += 1
                         compressed_paths.append(saved_path)
+                        profile_map[saved_path] = profile_name
                         msg = tr("Successfully compressed: {name} with profile {profile}").format(
                             name=src_file.name, profile=profile_name
                         )
@@ -436,6 +441,7 @@ class ImageCompressor:
                 if saved_path:
                     compressed_files += 1
                     compressed_paths.append(saved_path)
+                    profile_map[saved_path] = profile_name
                     msg = tr("Successfully compressed: {name} with profile {profile}").format(
                         name=src.name, profile=profile_name
                     )
@@ -456,6 +462,7 @@ class ImageCompressor:
         logger.info(msg)
         if status_callback:
             status_callback(msg)
+        self.last_profile_map = profile_map
         return total_files, compressed_files, compressed_paths, failed_files
 
     def get_compression_stats(
@@ -579,7 +586,7 @@ def create_image_pairs(compressed_dir: Path, original_dir: Path | None = None) -
 def save_compression_settings(
     output_dir: Path,
     compression_settings: dict[str, Any],
-    image_pairs: list[tuple[Path, Path]],
+    image_pairs: list[tuple[Path, Path, str]],
     stats: dict[str, Any],
     failed_files: list[tuple[Path, str]] | None = None,
     conversion_time: str | None = None,
@@ -590,9 +597,10 @@ def save_compression_settings(
     Args:
         output_dir: Directory where to save the settings file
         compression_settings: Dictionary with compression parameters
-        image_pairs: List of image pairs for comparison
-        failed_files: List of tuples ``(path, error)`` for images that failed to
-            compress
+        image_pairs: List of tuples ``(original, compressed, profile)``
+            for comparison
+        failed_files: List of tuples ``(path, error)`` for images that
+            failed to compress
         conversion_time: Human-readable duration of the compression process
     """
     import json
@@ -609,8 +617,9 @@ def save_compression_settings(
                 "compressed": str(compressed_path),
                 "original_name": original_path.name,
                 "compressed_name": compressed_path.name,
+                "profile": profile,
             }
-            for original_path, compressed_path in image_pairs
+            for original_path, compressed_path, profile in image_pairs
         ],
         "total_pairs": len(image_pairs),
         "failed_files": [{"path": str(path), "error": error} for path, error in failed_files],

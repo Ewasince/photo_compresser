@@ -93,10 +93,13 @@ class ImagePair:
     image1_path: str
     image2_path: str
     name: str = ""
+    profile: str = "Raw"
 
     def __post_init__(self) -> None:  # pragma: no cover - simple post-init
         if not self.name:
             self.name = f"{os.path.basename(self.image1_path)} vs {os.path.basename(self.image2_path)}"
+        if not self.profile:
+            self.profile = "Raw"
 
     def get_pixmap1(self) -> QPixmap:
         """Get the first image pixmap using the cache."""
