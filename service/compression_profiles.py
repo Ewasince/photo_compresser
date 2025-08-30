@@ -46,6 +46,48 @@ class ProfileConditions:
             "==": actual == cond.value,
         }.get(cond.op, False)
 
+    def evaluate(
+        self,
+        width: int,
+        height: int,
+        *,
+        image_format: str | None = None,
+        has_transparency: bool | None = None,
+        file_size: int | None = None,
+        exif: dict[str, Any] | None = None,
+    ) -> dict[str, bool]:
+        """Return evaluation results for all active conditions."""
+        smallest_side = min(width, height)
+        largest_side = max(width, height)
+        pixels = width * height
+        aspect_ratio = width / height
+        orientation = "square" if width == height else ("landscape" if width > height else "portrait")
+
+        results: dict[str, bool] = {}
+        if self.smallest_side is not None:
+            results["smallest_side"] = self._match(self.smallest_side, smallest_side)
+        if self.largest_side is not None:
+            results["largest_side"] = self._match(self.largest_side, largest_side)
+        if self.pixel_count is not None:
+            results["pixel_count"] = self._match(self.pixel_count, pixels)
+        if self.aspect_ratio is not None:
+            results["aspect_ratio"] = self._match(self.aspect_ratio, aspect_ratio)
+        if self.orientation is not None:
+            results["orientation"] = orientation == self.orientation
+        if self.input_formats is not None:
+            results["input_formats"] = image_format is not None and image_format.upper() in [
+                f.upper() for f in self.input_formats
+            ]
+        if self.requires_transparency is not None:
+            results["requires_transparency"] = (
+                has_transparency is not None and has_transparency == self.requires_transparency
+            )
+        if self.file_size is not None:
+            results["file_size"] = self._match(self.file_size, file_size)
+        if self.required_exif:
+            results["required_exif"] = exif is not None and all(exif.get(k) == v for k, v in self.required_exif.items())
+        return results
+
     def matches(
         self,
         width: int,
@@ -57,27 +99,16 @@ class ProfileConditions:
         exif: dict[str, Any] | None = None,
     ) -> bool:
         """Return ``True`` if the image properties satisfy the conditions."""
-        smallest_side = min(width, height)
-        largest_side = max(width, height)
-        pixels = width * height
-        aspect_ratio = width / height
-        orientation = "square" if width == height else ("landscape" if width > height else "portrait")
-
-        conditions = [
-            self._match(self.smallest_side, smallest_side),
-            self._match(self.largest_side, largest_side),
-            self._match(self.pixel_count, pixels),
-            self._match(self.aspect_ratio, aspect_ratio),
-            self.orientation is None or orientation == self.orientation,
-            self.input_formats is None
-            or (image_format is not None and image_format.upper() in [f.upper() for f in self.input_formats]),
-            self.requires_transparency is None
-            or (has_transparency is not None and has_transparency == self.requires_transparency),
-            self._match(self.file_size, file_size),
-            not self.required_exif
-            or (exif is not None and all(exif.get(k) == v for k, v in self.required_exif.items())),
-        ]
-        return all(conditions)
+        return all(
+            self.evaluate(
+                width,
+                height,
+                image_format=image_format,
+                has_transparency=has_transparency,
+                file_size=file_size,
+                exif=exif,
+            ).values()
+        )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProfileConditions:
@@ -145,9 +176,15 @@ def load_profiles(file_path: Path) -> list[CompressionProfile]:
 
 
 def select_profile(
-    image: Path | str | Image.Image, profiles: Sequence[CompressionProfile]
-) -> CompressionProfile | None:
+    image: Path | str | Image.Image,
+    profiles: Sequence[CompressionProfile],
+    *,
+    return_condition_results: bool = False,
+) -> CompressionProfile | None | tuple[CompressionProfile | None, dict[str, dict[str, bool]]]:
     """Return the first profile whose conditions match the image.
+
+    If ``return_condition_results`` is ``True``, also return evaluation
+    results for all profiles.
 
     Profiles are evaluated from the end of the sequence to the start so that
     lower panels in the UI take precedence over the ones above them. The top
@@ -167,14 +204,24 @@ def select_profile(
         image_format = (image.format or "").upper()
         has_transparency = "A" in image.getbands() or "transparency" in image.info
         exif = {ExifTags.TAGS.get(k, str(k)): v for k, v in image.getexif().items()}
-    for profile in reversed(profiles):
-        if profile.conditions.matches(
+
+    results: dict[str, dict[str, bool]] = {}
+    for profile in profiles:
+        results[profile.name] = profile.conditions.evaluate(
             width,
             height,
             image_format=image_format,
             has_transparency=has_transparency,
             file_size=file_size,
             exif=exif,
-        ):
-            return profile
-    return None
+        )
+
+    selected: CompressionProfile | None = None
+    for profile in reversed(profiles):
+        if all(results[profile.name].values()):
+            selected = profile
+            break
+
+    if return_condition_results:
+        return selected, results
+    return selected
