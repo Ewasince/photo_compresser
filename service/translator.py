@@ -86,6 +86,8 @@ _translations: dict[str, dict[str, str]] = {
         "Compare Stats": "Сравнить статистику",
         "Open Folder 1": "Открыть папку 1",
         "Open Folder 2": "Открыть папку 2",
+        "Path to folder 1:": "Путь к папке 1:",
+        "Path to folder 2:": "Путь к папке 2:",
         "N/A": "Н/Д",
         "No images loaded": "Изображения не загружены",
         "Select First Image": "Выберите первое изображение",

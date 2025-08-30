@@ -677,10 +677,15 @@ class CompressionStatsDialog(QDialog):
         self.setWindowTitle(tr("Compression Statistics"))
         layout = QGridLayout(self)
 
-        layout.addWidget(QLabel(tr("Metric")), 0, 0)
-        layout.addWidget(QLabel(tr("Directory 1")), 0, 1)
-        layout.addWidget(QLabel(tr("Directory 2")), 0, 2)
-        layout.addWidget(QLabel(tr("Difference")), 0, 3)
+        layout.addWidget(QLabel(tr("Path to folder 1:")), 0, 0)
+        layout.addWidget(QLabel(str(dir1) if dir1 is not None else tr("N/A")), 0, 1, 1, 3)
+        layout.addWidget(QLabel(tr("Path to folder 2:")), 1, 0)
+        layout.addWidget(QLabel(str(dir2) if dir2 is not None else tr("N/A")), 1, 1, 1, 3)
+
+        layout.addWidget(QLabel(tr("Metric")), 2, 0)
+        layout.addWidget(QLabel(tr("Directory 1")), 2, 1)
+        layout.addWidget(QLabel(tr("Directory 2")), 2, 2)
+        layout.addWidget(QLabel(tr("Difference")), 2, 3)
 
         param_label_map = {
             "output_format": "Output Format",
@@ -729,7 +734,7 @@ class CompressionStatsDialog(QDialog):
                 return tr("Different")
             return ""
 
-        row = 1
+        row = 3
 
         def add_global_row(key: str) -> None:
             nonlocal row
@@ -791,25 +796,30 @@ class CompressionStatsDialog(QDialog):
 
             add_param_row("output_format")
             add_param_row("quality")
+            format_specific = {
+                "jpeg": ["progressive", "subsampling", "optimize", "smooth", "keep_rgb"],
+                "webp": ["lossless", "method", "alpha_quality", "exact"],
+                "avif": [
+                    "subsampling",
+                    "speed",
+                    "codec",
+                    "range",
+                    "qmin",
+                    "qmax",
+                    "autotiling",
+                    "tile_rows",
+                    "tile_cols",
+                ],
+            }
 
-            if fmt1 == fmt2:
-                format_specific = {
-                    "jpeg": ["progressive", "subsampling", "optimize", "smooth", "keep_rgb"],
-                    "webp": ["lossless", "method", "alpha_quality", "exact"],
-                    "avif": [
-                        "subsampling",
-                        "speed",
-                        "codec",
-                        "range",
-                        "qmin",
-                        "qmax",
-                        "autotiling",
-                        "tile_rows",
-                        "tile_cols",
-                    ],
-                }
-                for key in format_specific.get(fmt1, []):
-                    add_param_row(key)
+            format_keys: list[str] = []
+            for fmt in (fmt1, fmt2):
+                for key in format_specific.get(fmt, []):
+                    if key not in format_keys:
+                        format_keys.append(key)
+
+            for key in format_keys:
+                add_param_row(key)
 
             cond_label_map = {
                 "smallest_side": "Smallest side",
