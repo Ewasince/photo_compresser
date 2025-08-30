@@ -700,6 +700,8 @@ class CompressionStatsDialog(QDialog):
             "tile_cols": "Tile Cols",
             "preserve_structure": "Preserve folder structure",
             "copy_unsupported": "Copy unsupported files",
+            "copy_unsupported_to_dir": "Copy unsupported files to separate folder",
+            "unsupported_dir": "Unsupported files folder",
         }
 
         def format_param_value(key: str, value: Any) -> str:
@@ -737,6 +739,8 @@ class CompressionStatsDialog(QDialog):
 
         add_global_row("preserve_structure")
         add_global_row("copy_unsupported")
+        add_global_row("copy_unsupported_to_dir")
+        add_global_row("unsupported_dir")
 
         profiles1 = settings1.get("profiles", [])
         profiles2 = settings2.get("profiles", [])
@@ -836,6 +840,11 @@ class CompressionStatsDialog(QDialog):
                 layout.addWidget(val2_label, row, 2)
                 layout.addWidget(diff_label, row, 3)
                 row += 1
+
+        metrics_header = QLabel(tr("Compression Metrics"))
+        metrics_header.setStyleSheet("font-weight: bold; margin-top: 10px")
+        layout.addWidget(metrics_header, row, 0, 1, 4)
+        row += 1
 
         label_map = {
             "input_size_mb": "Input Size",
