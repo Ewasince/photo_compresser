@@ -1389,6 +1389,8 @@ class MainWindow(QMainWindow):
                 cond_dict = asdict(conditions)
                 lines.append("")
                 lines.append(tr("Conditions") + ":")
+                passed: list[str] = []
+                failed: list[str] = []
                 for field, ok in selected_eval.items():
                     expected = cond_dict.get(field)
                     if expected is None:
@@ -1401,9 +1403,20 @@ class MainWindow(QMainWindow):
                         cond_repr = ", ".join(f"{k}={v}" for k, v in expected.items())
                     else:
                         cond_repr = str(expected)
-                    symbol = "✓" if ok else "✗"
                     label = tr(field.replace("_", " ").title())
-                    lines.append(f"{label} {cond_repr}: {symbol}")
+                    entry = f"{label} {cond_repr}"
+                    if ok:
+                        passed.append(entry)
+                    else:
+                        failed.append(entry)
+                if passed:
+                    lines.append(tr("Passed") + ":")
+                    for cond in passed:
+                        lines.append(f"✓ {cond}")
+                if failed:
+                    lines.append(tr("Failed") + ":")
+                    for cond in failed:
+                        lines.append(f"✗ {cond}")
         else:
             lines.append(tr("Raw"))
 
@@ -1418,6 +1431,8 @@ class MainWindow(QMainWindow):
                 lines.append(tr("Conditions") + ":")
                 conditions = ProfileConditions.from_dict(profile.get("conditions", {}))
                 cond_dict = asdict(conditions)
+                passed_prev: list[str] = []
+                failed_prev: list[str] = []
                 for field, ok in evals.items():
                     expected = cond_dict.get(field)
                     if expected is None:
@@ -1430,9 +1445,20 @@ class MainWindow(QMainWindow):
                         cond_repr = ", ".join(f"{k}={v}" for k, v in expected.items())
                     else:
                         cond_repr = str(expected)
-                    symbol = "✓" if ok else "✗"
                     label = tr(field.replace("_", " ").title())
-                    lines.append(f"{label} {cond_repr}: {symbol}")
+                    entry = f"{label} {cond_repr}"
+                    if ok:
+                        passed_prev.append(entry)
+                    else:
+                        failed_prev.append(entry)
+                if passed_prev:
+                    lines.append(tr("Passed") + ":")
+                    for cond in passed_prev:
+                        lines.append(f"✓ {cond}")
+                if failed_prev:
+                    lines.append(tr("Failed") + ":")
+                    for cond in failed_prev:
+                        lines.append(f"✗ {cond}")
 
         return "\n".join(lines)
 

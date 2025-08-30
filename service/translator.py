@@ -163,6 +163,8 @@ _translations: dict[str, dict[str, str]] = {
         "Required EXIF (k=v,...)": "Требуемый EXIF (k=v,...)",
         "Conditions": "Условия",
         "Conditions (default profile - always used)": "Условия (профиль по умолчанию — используется всегда)",
+        "Passed": "Сработали",
+        "Failed": "Не сработали",
     }
 }
 
