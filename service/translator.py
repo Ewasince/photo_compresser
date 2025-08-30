@@ -68,6 +68,7 @@ _translations: dict[str, dict[str, str]] = {
         "Compression complete: {compressed}/{total} files processed": (
             "Сжатие завершено: {compressed}/{total} файлов обработано"
         ),
+        "Processed {current}/{total} files": "Обработано {current}/{total} файлов",
         "Loading Previews": "Загрузка превью",
         "Generating previews: {current}/{total}": "Создание превью: {current}/{total}",
         "Image Comparison Viewer": "Просмотр сравнения изображений",

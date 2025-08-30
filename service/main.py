@@ -56,6 +56,7 @@ class CompressionWorker(QThread):
 
     progress_updated = Signal(int, int)  # current, total
     status_updated = Signal(str)
+    log_updated = Signal(str)
     compression_finished = Signal(dict)  # stats
     error_occurred = Signal(str)
 
@@ -89,6 +90,7 @@ class CompressionWorker(QThread):
                 self.profiles,
                 progress_callback=lambda current, total: self.progress_updated.emit(current, total),
                 status_callback=lambda msg: self.status_updated.emit(msg),
+                log_callback=lambda msg: self.log_updated.emit(msg),
                 num_workers=1,
                 stop_event=self._stop_event,
             )
@@ -697,6 +699,7 @@ class MainWindow(QMainWindow):
         )
         self.compression_worker.progress_updated.connect(self.update_progress)
         self.compression_worker.status_updated.connect(self.update_status)
+        self.compression_worker.log_updated.connect(self.log_message)
         self.compression_worker.compression_finished.connect(self.compression_finished)
         self.compression_worker.error_occurred.connect(self.compression_error)
 
@@ -715,6 +718,7 @@ class MainWindow(QMainWindow):
         """Update progress bar."""
         self.progress_bar.setRange(0, total)
         self.progress_bar.setValue(current)
+        self.status_label.setText(tr("Processed {current}/{total} files").format(current=current, total=total))
 
     def update_status(self, message: str) -> None:
         """Update status message."""

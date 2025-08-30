@@ -281,6 +281,7 @@ class ImageCompressor:
         profiles: Sequence[CompressionProfile] | None = None,
         progress_callback: Callable[[int, int], None] | None = None,
         status_callback: Callable[[str], None] | None = None,
+        log_callback: Callable[[str], None] | None = None,
         num_workers: int | None = None,
         stop_event: Event | None = None,
     ) -> tuple[int, int, list[Path], list[Path]]:
@@ -361,6 +362,8 @@ class ImageCompressor:
                     msg = tr("Skipped unsupported file: {name}").format(name=file_path.name)
 
                 logger.info(msg)
+                if log_callback:
+                    log_callback(msg)
 
         def _compress_task(src: Path) -> tuple[Path | None, Path]:
             with Image.open(src) as img:
@@ -403,6 +406,8 @@ class ImageCompressor:
                         failed_files.append(src_file)
                         msg = tr("Failed to compress: {name}").format(name=src_file.name)
                         logger.warning(msg)
+                    if log_callback:
+                        log_callback(msg)
                     processed_files += 1
                     if progress_callback:
                         progress_callback(processed_files, total_files)
@@ -420,6 +425,8 @@ class ImageCompressor:
                     failed_files.append(src)
                     msg = tr("Failed to compress: {name}").format(name=src.name)
                     logger.warning(msg)
+                if log_callback:
+                    log_callback(msg)
                 processed_files += 1
                 if progress_callback:
                     progress_callback(processed_files, total_files)
