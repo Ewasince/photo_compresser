@@ -8,6 +8,7 @@ import sys
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
+from threading import Event
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont, QIcon
@@ -72,6 +73,8 @@ class CompressionWorker(QThread):
         self.output_dir = output_dir
         self.compression_settings = compression_settings
         self.profiles = profiles
+        self._stop_event = Event()
+        self.cancelled = False
 
     def run(self) -> None:
         """Run the compression process."""
@@ -86,6 +89,8 @@ class CompressionWorker(QThread):
                 self.profiles,
                 progress_callback=lambda current, total: self.progress_updated.emit(current, total),
                 status_callback=lambda msg: self.status_updated.emit(msg),
+                num_workers=1,
+                stop_event=self._stop_event,
             )
 
             # Get compression statistics
@@ -116,17 +121,25 @@ class CompressionWorker(QThread):
                     stats["conversion_time"],
                 )
 
-            self.status_updated.emit(
-                tr("Compression completed! {compressed}/{total} files compressed. {failed} failed.").format(
-                    compressed=compressed_files,
-                    total=total_files,
-                    failed=len(failed_files),
+            if self._stop_event.is_set():
+                self.cancelled = True
+                self.status_updated.emit(tr("Compression aborted by user"))
+            else:
+                self.status_updated.emit(
+                    tr("Compression completed! {compressed}/{total} files compressed. {failed} failed.").format(
+                        compressed=compressed_files,
+                        total=total_files,
+                        failed=len(failed_files),
+                    )
                 )
-            )
             self.compression_finished.emit(stats)
 
         except Exception as e:
             self.error_occurred.emit(tr("Compression error: {error}").format(error=e))
+
+    def stop(self) -> None:
+        """Request the worker to stop."""
+        self._stop_event.set()
 
 
 class MainWindow(QMainWindow):
@@ -375,6 +388,27 @@ class MainWindow(QMainWindow):
                 background-color: #6c757d;
             }
         """)
+        self.compress_btn_default_style = self.compress_btn.styleSheet()
+        self.abort_btn_style = """
+            QPushButton {
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+            }
+            QPushButton:pressed {
+                background-color: #bd2130;
+            }
+            QPushButton:disabled {
+                background-color: #6c757d;
+            }
+        """
         self.compress_btn.setEnabled(False)
 
         self.compare_btn = QPushButton(tr("Compare Images"))
@@ -471,7 +505,12 @@ class MainWindow(QMainWindow):
         self.reset_btn.setText(tr("Reset Settings"))
         self.progress_group.setTitle(tr("Progress"))
         self.status_label.setText(tr("Ready to compress images"))
-        self.compress_btn.setText(tr("Start Compression"))
+        if self.compression_worker and self.compression_worker.isRunning():
+            self.compress_btn.setText(tr("Abort Compression"))
+            self.compress_btn.setStyleSheet(self.abort_btn_style)
+        else:
+            self.compress_btn.setText(tr("Start Compression"))
+            self.compress_btn.setStyleSheet(self.compress_btn_default_style)
         self.compare_btn.setText(tr("Compare Images"))
         self.log_group.setTitle(tr("Log"))
         self.lang_label.setText(tr("Language:"))
@@ -592,6 +631,13 @@ class MainWindow(QMainWindow):
 
     def start_compression(self) -> None:
         """Start the compression process."""
+        if self.compression_worker and self.compression_worker.isRunning():
+            self.log_message(tr("Stopping compression..."))
+            self.status_label.setText(tr("Stopping compression..."))
+            self.compression_worker.stop()
+            self.compress_btn.setEnabled(False)
+            return
+
         if self.input_directory is None:
             QMessageBox.warning(self, tr("Warning"), tr("Please select an input directory first."))
             return
@@ -653,7 +699,8 @@ class MainWindow(QMainWindow):
         self.compression_worker.error_occurred.connect(self.compression_error)
 
         # Update UI
-        self.compress_btn.setEnabled(False)
+        self.compress_btn.setText(tr("Abort Compression"))
+        self.compress_btn.setStyleSheet(self.abort_btn_style)
         self.compare_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)  # Indeterminate progress
@@ -674,13 +721,20 @@ class MainWindow(QMainWindow):
 
     def compression_finished(self, stats: dict) -> None:
         """Handle compression completion."""
+        cancelled = self.compression_worker.cancelled if self.compression_worker else False
+
         # Update UI
+        self.compress_btn.setText(tr("Start Compression"))
+        self.compress_btn.setStyleSheet(self.compress_btn_default_style)
         self.compress_btn.setEnabled(True)
         self.compare_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
 
-        # Show completion message
-        message = f"""
+        if cancelled:
+            self.log_message(tr("Compression aborted by user"))
+            self.status_label.setText(tr("Compression aborted by user"))
+        else:
+            message = f"""
 Compression completed successfully!
 
 Statistics:
@@ -692,16 +746,18 @@ Statistics:
 - Compression ratio: {stats["compression_ratio_percent"]:.1f}%
 
 Output directory: {self.output_directory}
-        """
+            """
 
-        self.log_message(tr("Compression completed successfully!"))
-        QMessageBox.information(self, tr("Compression Complete"), message)
+            self.log_message(tr("Compression completed successfully!"))
+            QMessageBox.information(self, tr("Compression Complete"), message)
+            self.status_label.setText(tr("Compression completed successfully!"))
 
-        # Update status
-        self.status_label.setText(tr("Compression completed successfully!"))
+        self.compression_worker = None
 
     def compression_error(self, error_message: str) -> None:
         """Handle compression error."""
+        self.compress_btn.setText(tr("Start Compression"))
+        self.compress_btn.setStyleSheet(self.compress_btn_default_style)
         self.compress_btn.setEnabled(True)
         self.compare_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
@@ -712,6 +768,7 @@ Output directory: {self.output_directory}
             tr("Compression Error"),
             tr("An error occurred during compression:\n\n{error}").format(error=error_message),
         )
+        self.compression_worker = None
 
     def show_comparison(self) -> None:
         """Show the image comparison window."""

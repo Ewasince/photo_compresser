@@ -9,6 +9,7 @@ import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from threading import Event
 from typing import Any, Callable, Sequence
 
 from PIL import Image
@@ -269,6 +270,7 @@ class ImageCompressor:
         progress_callback: Callable[[int, int], None] | None = None,
         status_callback: Callable[[str], None] | None = None,
         num_workers: int | None = None,
+        stop_event: Event | None = None,
     ) -> tuple[int, int, list[Path], list[Path]]:
         """
         Process a directory recursively, compressing all supported images.
@@ -317,6 +319,8 @@ class ImageCompressor:
 
         # Prepare tasks and copy non-image files
         for file_path in input_root.rglob("*"):
+            if stop_event and stop_event.is_set():
+                break
             if not file_path.is_file():
                 continue
 
@@ -373,6 +377,9 @@ class ImageCompressor:
             with ThreadPoolExecutor(max_workers=worker_count) as executor:
                 future_to_file = [executor.submit(_compress_task, c, s, d) for c, s, d in tasks]
                 for future in as_completed(future_to_file):
+                    if stop_event and stop_event.is_set():
+                        executor.shutdown(wait=False, cancel_futures=True)
+                        break
                     saved_path, src_file = future.result()
                     if saved_path:
                         compressed_files += 1
@@ -392,6 +399,8 @@ class ImageCompressor:
                         progress_callback(processed_files, total_files)
         else:
             for comp, src, dst in tasks:
+                if stop_event and stop_event.is_set():
+                    break
                 saved_path = comp.compress_image(src, dst)
                 if saved_path:
                     copy_times_from_src(src, saved_path)
