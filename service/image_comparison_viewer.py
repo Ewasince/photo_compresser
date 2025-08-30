@@ -1030,6 +1030,10 @@ class MainWindow(QMainWindow):
         self.profile_label1.setStyleSheet("color: #ccc; font-size: 12px;")
         controls_layout.addWidget(self.profile_label1)
 
+        self.profile_sep = QLabel("|")
+        self.profile_sep.setStyleSheet("color: #ccc; font-size: 12px;")
+        controls_layout.addWidget(self.profile_sep)
+
         self.profile_label2 = QLabel()
         self.profile_label2.setStyleSheet("color: #ccc; font-size: 12px;")
         controls_layout.addWidget(self.profile_label2)
@@ -1304,8 +1308,9 @@ class MainWindow(QMainWindow):
                 self.status_label.setText(status)
                 text1 = tr("Profile: {profile}").format(profile=profile_name1)
                 text2 = tr("Profile: {profile}").format(profile=profile_name2)
-                self.profile_label1.setText(f"{text1} |")
+                self.profile_label1.setText(text1)
                 self.profile_label2.setText(text2)
+                self.profile_sep.setText("|")
                 self.profile_label1.setToolTip(
                     self._format_profile_tooltip(self.profile_list1, current_pair.profile1, current_pair.image1_path)
                 )
@@ -1316,10 +1321,16 @@ class MainWindow(QMainWindow):
                 self.status_label.setText(tr("Loaded {count} image pairs").format(count=len(self.image_pairs)))
                 self.profile_label1.clear()
                 self.profile_label2.clear()
+                self.profile_sep.clear()
+                self.profile_label1.setToolTip("")
+                self.profile_label2.setToolTip("")
         else:
             self.status_label.setText(tr("No images loaded"))
             self.profile_label1.clear()
             self.profile_label2.clear()
+            self.profile_sep.clear()
+            self.profile_label1.setToolTip("")
+            self.profile_label2.setToolTip("")
 
     def _format_profile_tooltip(
         self, profiles: list[dict[str, Any]], selected_name: str, image_path: str | None
