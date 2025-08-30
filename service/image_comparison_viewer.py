@@ -51,6 +51,11 @@ from PySide6.QtWidgets import (
 from service.constants import SUPPORTED_EXTENSIONS
 from service.file_utils import format_timedelta
 from service.image_pair import ImagePair
+from service.parameters_defaults import (
+    AVIF_DEFAULTS,
+    JPEG_DEFAULTS,
+    WEBP_DEFAULTS,
+)
 from service.translator import tr
 
 BUTTON_STYLE = """
@@ -799,6 +804,8 @@ class CompressionStatsDialog(QDialog):
         param_label_map = {
             "output_format": "Output Format",
             "quality": "Quality",
+            "max_largest_side": "Max largest side",
+            "max_smallest_side": "Max smallest side",
             "progressive": "Progressive",
             "subsampling": "Subsampling",
             "optimize": "Optimize",
@@ -823,6 +830,8 @@ class CompressionStatsDialog(QDialog):
         }
 
         def format_param_value(key: str, value: Any) -> str:
+            if value is None or value == "":
+                return tr("N/A")
             if key == "quality" and isinstance(value, int | float):
                 return f"{int(value)}%"
             if isinstance(value, bool):
@@ -864,6 +873,43 @@ class CompressionStatsDialog(QDialog):
         profiles2 = settings2.get("profiles", [])
         profile_count = max(len(profiles1), len(profiles2))
 
+        format_specific: dict[str, set[str]] = {
+            "jpeg": {"progressive", "subsampling", "optimize", "smooth", "keep_rgb"},
+            "webp": {"lossless", "method", "alpha_quality", "exact"},
+            "avif": {
+                "subsampling",
+                "speed",
+                "codec",
+                "range",
+                "qmin",
+                "qmax",
+                "autotiling",
+                "tile_rows",
+                "tile_cols",
+            },
+        }
+
+        format_defaults = {
+            "jpeg": JPEG_DEFAULTS,
+            "webp": WEBP_DEFAULTS,
+            "avif": AVIF_DEFAULTS,
+        }
+
+        def add_row(label_key: str, val1: Any, val2: Any, grey: bool = False) -> None:
+            nonlocal row
+            metric_label = QLabel(tr(param_label_map.get(label_key, label_key)))
+            val1_label = QLabel(format_param_value(label_key, val1))
+            val2_label = QLabel(format_param_value(label_key, val2))
+            diff_label = QLabel(diff_param_value(label_key, val1, val2))
+            if grey:
+                for lbl in (metric_label, val1_label, val2_label, diff_label):
+                    lbl.setStyleSheet("color: #bdbdbd")
+            layout.addWidget(metric_label, row, 0)
+            layout.addWidget(val1_label, row, 1)
+            layout.addWidget(val2_label, row, 2)
+            layout.addWidget(diff_label, row, 3)
+            row += 1
+
         for idx in range(profile_count):
             p1 = profiles1[idx] if idx < len(profiles1) else {}
             p2 = profiles2[idx] if idx < len(profiles2) else {}
@@ -874,52 +920,41 @@ class CompressionStatsDialog(QDialog):
 
             fmt1 = str(p1.get("output_format", "")).lower()
             fmt2 = str(p2.get("output_format", "")).lower()
+            adv1: dict[str, Any] = p1.get("advanced_params", {})
+            adv2: dict[str, Any] = p2.get("advanced_params", {})
 
-            def add_param_row(
-                profile_key: str,
-                *,
-                _p1: dict[str, Any] = p1,
-                _p2: dict[str, Any] = p2,
-                _fmt1: str = fmt1,
-                _fmt2: str = fmt2,
-            ) -> None:
-                nonlocal row
-                val1 = _p1.get(profile_key, "")
-                val2 = _p2.get(profile_key, "")
-                metric_label = QLabel(tr(param_label_map.get(profile_key, profile_key)))
-                val1_label = QLabel(format_param_value(profile_key, val1))
-                val2_label = QLabel(format_param_value(profile_key, val2))
-                diff_label = QLabel(diff_param_value(profile_key, val1, val2))
-                if val1 == val2 and (profile_key == "output_format" or _fmt1 == _fmt2):
-                    for lbl in (metric_label, val1_label, val2_label, diff_label):
-                        lbl.setStyleSheet("color: #bdbdbd")
-                layout.addWidget(metric_label, row, 0)
-                layout.addWidget(val1_label, row, 1)
-                layout.addWidget(val2_label, row, 2)
-                layout.addWidget(diff_label, row, 3)
+            section = QLabel(tr("Basic settings:"))
+            section.setStyleSheet("font-style: italic")
+            layout.addWidget(section, row, 0, 1, 4)
+            row += 1
+
+            for key in ["output_format", "quality", "max_largest_side", "max_smallest_side"]:
+                basic_val1 = p1.get(key)
+                basic_val2 = p2.get(key)
+                add_row(key, basic_val1, basic_val2, grey=basic_val1 == basic_val2)
+
+            adv_keys = sorted(set(adv1.keys()) | set(adv2.keys()))
+            if adv_keys:
+                section = QLabel(tr("Advanced settings:"))
+                section.setStyleSheet("font-style: italic")
+                layout.addWidget(section, row, 0, 1, 4)
                 row += 1
 
-            add_param_row("output_format")
-            add_param_row("quality")
+            for key in adv_keys:
+                adv_val1: Any
+                adv_val2: Any
 
-            if fmt1 == fmt2:
-                format_specific = {
-                    "jpeg": ["progressive", "subsampling", "optimize", "smooth", "keep_rgb"],
-                    "webp": ["lossless", "method", "alpha_quality", "exact"],
-                    "avif": [
-                        "subsampling",
-                        "speed",
-                        "codec",
-                        "range",
-                        "qmin",
-                        "qmax",
-                        "autotiling",
-                        "tile_rows",
-                        "tile_cols",
-                    ],
-                }
-                for key in format_specific.get(fmt1, []):
-                    add_param_row(key)
+                if key in format_specific.get(fmt1, set()):
+                    adv_val1 = adv1.get(key, format_defaults.get(fmt1, {}).get(key))
+                else:
+                    adv_val1 = tr("N/A")
+                if key in format_specific.get(fmt2, set()):
+                    adv_val2 = adv2.get(key, format_defaults.get(fmt2, {}).get(key))
+                else:
+                    adv_val2 = tr("N/A")
+
+                grey = fmt1 == fmt2 and adv_val1 == adv_val2
+                add_row(key, adv_val1, adv_val2, grey=grey)
 
             cond_label_map = {
                 "smallest_side": "Smallest side",

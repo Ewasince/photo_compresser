@@ -97,6 +97,7 @@ _translations: dict[str, dict[str, str]] = {
         "Directory 2": "Папка 2",
         "Difference": "Разница",
         "Different": "Различаются",
+        "N/A": "Н/Д",
         "Output Format": "Формат вывода",
         "Quality": "Качество",
         "Progressive": "Прогрессивный",
