@@ -160,10 +160,6 @@ class ProfilePanel(QWidget):
         self.format_combo.setCurrentText(BASIC_DEFAULTS["output_format"])
         grid.addWidget(self.format_combo, 3, 1)
 
-        self.preserve_cb = QCheckBox(tr("Preserve folder structure"))
-        self.preserve_cb.setChecked(BASIC_DEFAULTS["preserve_structure"])
-        grid.addWidget(self.preserve_cb, 4, 0, 1, 2)
-
         layout.addWidget(self.basic_group)
 
         # Advanced settings
@@ -422,7 +418,6 @@ class ProfilePanel(QWidget):
         self.max_largest_cb.setText(tr("Max largest side") + ":")
         self.max_smallest_cb.setText(tr("Max smallest side") + ":")
         self.format_label.setText(tr("Format") + ":")
-        self.preserve_cb.setText(tr("Preserve folder structure"))
 
         self.advanced_box.toggle_button.setText(tr("Advanced Settings"))
         self.jpeg_group.setTitle(tr("JPEG"))
@@ -489,7 +484,6 @@ class ProfilePanel(QWidget):
             "quality": self.quality.value(),
             "max_largest_side": self.max_largest.value() if self.max_largest_cb.isChecked() else None,
             "max_smallest_side": self.max_smallest.value() if self.max_smallest_cb.isChecked() else None,
-            "preserve_structure": self.preserve_cb.isChecked(),
             "output_format": self.format_combo.currentText(),
             "jpeg_params": {
                 "progressive": self.jpeg_progressive.isChecked(),
@@ -553,7 +547,6 @@ class ProfilePanel(QWidget):
             max_largest_side=params["max_largest_side"],
             max_smallest_side=params["max_smallest_side"],
             output_format=params["output_format"],
-            preserve_structure=params["preserve_structure"],
             jpeg_params=params["jpeg_params"],
             webp_params=params["webp_params"],
             avif_params=params["avif_params"],
@@ -580,7 +573,6 @@ class ProfilePanel(QWidget):
             self.max_smallest.setEnabled(False)
 
         self.format_combo.setCurrentText(profile.output_format)
-        self.preserve_cb.setChecked(profile.preserve_structure)
 
         jpeg = profile.jpeg_params
         self.jpeg_progressive.setChecked(jpeg.get("progressive", JPEG_DEFAULTS["progressive"]))
@@ -691,7 +683,6 @@ class ProfilePanel(QWidget):
         self.max_smallest.setEnabled(BASIC_DEFAULTS["max_smallest_enabled"])
 
         self.format_combo.setCurrentText(BASIC_DEFAULTS["output_format"])
-        self.preserve_cb.setChecked(BASIC_DEFAULTS["preserve_structure"])
 
         self.jpeg_progressive.setChecked(JPEG_DEFAULTS["progressive"])
         self.jpeg_subsampling.setCurrentText(JPEG_DEFAULTS["subsampling"])

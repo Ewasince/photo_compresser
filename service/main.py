@@ -8,11 +8,13 @@ import sys
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
+from threading import Event
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QFileDialog,
     QGroupBox,
@@ -44,6 +46,7 @@ from service.image_compression import (
     create_image_pairs,
     save_compression_settings,
 )
+from service.parameters_defaults import GLOBAL_DEFAULTS
 from service.profile_panel import ProfilePanel
 from service.translator import LANGUAGES, get_language, set_language, tr
 
@@ -53,6 +56,7 @@ class CompressionWorker(QThread):
 
     progress_updated = Signal(int, int)  # current, total
     status_updated = Signal(str)
+    log_updated = Signal(str)
     compression_finished = Signal(dict)  # stats
     error_occurred = Signal(str)
 
@@ -70,6 +74,8 @@ class CompressionWorker(QThread):
         self.output_dir = output_dir
         self.compression_settings = compression_settings
         self.profiles = profiles
+        self._stop_event = Event()
+        self.cancelled = False
 
     def run(self) -> None:
         """Run the compression process."""
@@ -83,6 +89,10 @@ class CompressionWorker(QThread):
                 self.output_dir,
                 self.profiles,
                 progress_callback=lambda current, total: self.progress_updated.emit(current, total),
+                status_callback=lambda msg: self.status_updated.emit(msg),
+                log_callback=lambda msg: self.log_updated.emit(msg),
+                num_workers=1,
+                stop_event=self._stop_event,
             )
 
             # Get compression statistics
@@ -100,7 +110,9 @@ class CompressionWorker(QThread):
             stats["conversion_time"] = format_timedelta(elapsed)
 
             # Create image pairs for settings file
+            self.status_updated.emit(tr("Generating image pairs..."))
             image_pairs = create_image_pairs(self.output_dir, self.input_dir)
+            self.status_updated.emit(tr("Saving compression settings..."))
 
             # Save compression settings
             if image_pairs or failed_files:
@@ -113,17 +125,25 @@ class CompressionWorker(QThread):
                     stats["conversion_time"],
                 )
 
-            self.status_updated.emit(
-                tr("Compression completed! {compressed}/{total} files compressed. {failed} failed.").format(
-                    compressed=compressed_files,
-                    total=total_files,
-                    failed=len(failed_files),
+            if self._stop_event.is_set():
+                self.cancelled = True
+                self.status_updated.emit(tr("Compression aborted by user"))
+            else:
+                self.status_updated.emit(
+                    tr("Compression completed! {compressed}/{total} files compressed. {failed} failed.").format(
+                        compressed=compressed_files,
+                        total=total_files,
+                        failed=len(failed_files),
+                    )
                 )
-            )
             self.compression_finished.emit(stats)
 
         except Exception as e:
             self.error_occurred.emit(tr("Compression error: {error}").format(error=e))
+
+    def stop(self) -> None:
+        """Request the worker to stop."""
+        self._stop_event.set()
 
 
 class MainWindow(QMainWindow):
@@ -134,6 +154,7 @@ class MainWindow(QMainWindow):
         self.compression_worker: CompressionWorker | None = None
         self.output_directory: Path | None = None
         self.input_directory: Path | None = None
+        self.progress_start_time: datetime | None = None
 
         self.setup_ui()
         self.setup_connections()
@@ -205,8 +226,9 @@ class MainWindow(QMainWindow):
 
         # Input directory selection
         input_dir_layout = QHBoxLayout()
-        self.input_dir_label = QLabel(tr("No input directory selected"))
-        self.input_dir_label.setStyleSheet(
+        self.input_dir_edit = QLineEdit()
+        self.input_dir_edit.setPlaceholderText(tr("No input directory selected"))
+        self.input_dir_edit.setStyleSheet(
             "padding: 8px; background-color: white; border: 1px solid #ccc; border-radius: 4px;"
         )
         self.select_input_btn = QPushButton(tr("Select Input Directory"))
@@ -227,7 +249,7 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        input_dir_layout.addWidget(self.input_dir_label, 1)
+        input_dir_layout.addWidget(self.input_dir_edit, 1)
         input_dir_layout.addWidget(self.select_input_btn)
         input_layout.addLayout(input_dir_layout)
 
@@ -264,6 +286,14 @@ class MainWindow(QMainWindow):
         output_dir_layout.addWidget(self.regen_output_btn)
         output_dir_layout.addWidget(self.select_output_btn)
         input_layout.addLayout(output_dir_layout)
+
+        self.preserve_structure_cb = QCheckBox(tr("Preserve folder structure"))
+        self.preserve_structure_cb.setChecked(GLOBAL_DEFAULTS["preserve_structure"])
+        input_layout.addWidget(self.preserve_structure_cb)
+
+        self.copy_unsupported_cb = QCheckBox(tr("Copy unsupported files"))
+        self.copy_unsupported_cb.setChecked(GLOBAL_DEFAULTS["copy_unsupported"])
+        input_layout.addWidget(self.copy_unsupported_cb)
 
         main_layout.addWidget(self.input_group)
 
@@ -363,6 +393,27 @@ class MainWindow(QMainWindow):
                 background-color: #6c757d;
             }
         """)
+        self.compress_btn_default_style = self.compress_btn.styleSheet()
+        self.abort_btn_style = """
+            QPushButton {
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #c82333;
+            }
+            QPushButton:pressed {
+                background-color: #bd2130;
+            }
+            QPushButton:disabled {
+                background-color: #6c757d;
+            }
+        """
         self.compress_btn.setEnabled(False)
 
         self.compare_btn = QPushButton(tr("Compare Images"))
@@ -414,6 +465,7 @@ class MainWindow(QMainWindow):
         """Set up signal connections."""
         self.select_input_btn.clicked.connect(self.select_input_directory)
         self.select_output_btn.clicked.connect(self.select_output_directory)
+        self.input_dir_edit.textChanged.connect(self.update_input_directory_from_text)
         self.output_dir_edit.textChanged.connect(self.update_output_directory_from_text)
         self.compress_btn.clicked.connect(self.start_compression)
         self.compare_btn.clicked.connect(self.show_comparison)
@@ -444,19 +496,26 @@ class MainWindow(QMainWindow):
         self.title_label.setText(tr("Image Compression Tool"))
         self.input_group.setTitle(tr("Input Settings"))
         if self.input_directory is None:
-            self.input_dir_label.setText(tr("No input directory selected"))
+            self.input_dir_edit.setPlaceholderText(tr("No input directory selected"))
         self.select_input_btn.setText(tr("Select Input Directory"))
         if self.output_directory is None:
             self.output_dir_edit.setPlaceholderText(tr("No output directory selected"))
         self.regen_output_btn.setToolTip(tr("Regenerate output directory name"))
         self.select_output_btn.setText(tr("Select Output Directory"))
+        self.preserve_structure_cb.setText(tr("Preserve folder structure"))
+        self.copy_unsupported_cb.setText(tr("Copy unsupported files"))
         self.save_profiles_btn.setText(tr("Save Profiles"))
         self.load_profiles_btn.setText(tr("Load Profiles"))
         self.add_profile_btn.setText(tr("Add Profile"))
         self.reset_btn.setText(tr("Reset Settings"))
         self.progress_group.setTitle(tr("Progress"))
         self.status_label.setText(tr("Ready to compress images"))
-        self.compress_btn.setText(tr("Start Compression"))
+        if self.compression_worker and self.compression_worker.isRunning():
+            self.compress_btn.setText(tr("Abort Compression"))
+            self.compress_btn.setStyleSheet(self.abort_btn_style)
+        else:
+            self.compress_btn.setText(tr("Start Compression"))
+            self.compress_btn.setStyleSheet(self.compress_btn_default_style)
         self.compare_btn.setText(tr("Compare Images"))
         self.log_group.setTitle(tr("Log"))
         self.lang_label.setText(tr("Language:"))
@@ -470,7 +529,7 @@ class MainWindow(QMainWindow):
 
         if directory:
             self.input_directory = Path(directory)
-            self.input_dir_label.setText(str(self.input_directory))
+            self.input_dir_edit.setText(str(self.input_directory))
             self.output_directory = self.generate_output_directory()
             self.output_dir_edit.setText(str(self.output_directory))
             self.compress_btn.setEnabled(True)
@@ -483,6 +542,8 @@ class MainWindow(QMainWindow):
             panel.setParent(None)
         self.profile_panels.clear()
         self.add_profile_panel()
+        self.preserve_structure_cb.setChecked(GLOBAL_DEFAULTS["preserve_structure"])
+        self.copy_unsupported_cb.setChecked(GLOBAL_DEFAULTS["copy_unsupported"])
         self.log_message(tr("Compression settings reset to defaults"))
 
     def select_output_directory(self) -> None:
@@ -496,6 +557,20 @@ class MainWindow(QMainWindow):
             self.output_directory = Path(directory)
             self.output_dir_edit.setText(str(self.output_directory))
             self.log_message(tr("Selected output directory: {path}").format(path=self.output_directory))
+
+    def update_input_directory_from_text(self, text: str) -> None:
+        """Update stored input directory when text changes."""
+        path = Path(text)
+        if text and path.exists():
+            self.input_directory = path
+            self.compress_btn.setEnabled(True)
+            self.compare_btn.setEnabled(True)
+            self.output_directory = self.generate_output_directory()
+            self.output_dir_edit.setText(str(self.output_directory))
+        else:
+            self.input_directory = None
+            self.compress_btn.setEnabled(False)
+            self.compare_btn.setEnabled(False)
 
     def update_output_directory_from_text(self, text: str) -> None:
         """Update stored output directory when text changes."""
@@ -561,6 +636,14 @@ class MainWindow(QMainWindow):
 
     def start_compression(self) -> None:
         """Start the compression process."""
+        if self.compression_worker and self.compression_worker.isRunning():
+            self.log_message(tr("Stopping compression..."))
+            self.status_label.setText(tr("Stopping compression..."))
+            self.compression_worker.stop()
+            self.compress_btn.setEnabled(False)
+            self.log_message(tr("Waiting for compression to stop; start button disabled"))
+            return
+
         if self.input_directory is None:
             QMessageBox.warning(self, tr("Warning"), tr("Please select an input directory first."))
             return
@@ -585,11 +668,14 @@ class MainWindow(QMainWindow):
         profiles = [panel.to_profile() for panel in self.profile_panels]
         default_profile = profiles[0]
 
+        preserve_structure = self.preserve_structure_cb.isChecked()
+        copy_unsupported = self.copy_unsupported_cb.isChecked()
         compressor = ImageCompressor(
             quality=default_profile.quality,
             max_largest_side=default_profile.max_largest_side,
             max_smallest_side=default_profile.max_smallest_side,
-            preserve_structure=default_profile.preserve_structure,
+            preserve_structure=preserve_structure,
+            copy_unsupported=copy_unsupported,
             output_format=default_profile.output_format,
         )
         compressor.set_jpeg_parameters(**default_profile.jpeg_params)
@@ -600,6 +686,8 @@ class MainWindow(QMainWindow):
             "input_directory": str(self.input_directory),
             "output_directory": str(self.output_directory),
             "profiles": [asdict(p) for p in profiles],
+            "preserve_structure": preserve_structure,
+            "copy_unsupported": copy_unsupported,
         }
 
         # Create and start worker thread
@@ -613,11 +701,15 @@ class MainWindow(QMainWindow):
         )
         self.compression_worker.progress_updated.connect(self.update_progress)
         self.compression_worker.status_updated.connect(self.update_status)
+        self.compression_worker.log_updated.connect(self.log_message)
         self.compression_worker.compression_finished.connect(self.compression_finished)
         self.compression_worker.error_occurred.connect(self.compression_error)
 
+        self.progress_start_time = datetime.now()
+
         # Update UI
-        self.compress_btn.setEnabled(False)
+        self.compress_btn.setText(tr("Abort Compression"))
+        self.compress_btn.setStyleSheet(self.abort_btn_style)
         self.compare_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)  # Indeterminate progress
@@ -630,6 +722,16 @@ class MainWindow(QMainWindow):
         """Update progress bar."""
         self.progress_bar.setRange(0, total)
         self.progress_bar.setValue(current)
+        if current > 0 and self.progress_start_time:
+            elapsed = datetime.now() - self.progress_start_time
+            remaining = elapsed * (total - current) / current
+            remaining_text = format_timedelta(remaining)
+            status = tr("Processed {current}/{total} files (≈ {remaining} left)").format(
+                current=current, total=total, remaining=remaining_text
+            )
+        else:
+            status = tr("Processed {current}/{total} files").format(current=current, total=total)
+        self.status_label.setText(status)
 
     def update_status(self, message: str) -> None:
         """Update status message."""
@@ -638,13 +740,20 @@ class MainWindow(QMainWindow):
 
     def compression_finished(self, stats: dict) -> None:
         """Handle compression completion."""
+        cancelled = self.compression_worker.cancelled if self.compression_worker else False
+        self.progress_start_time = None
+
         # Update UI
+        self.compress_btn.setText(tr("Start Compression"))
+        self.compress_btn.setStyleSheet(self.compress_btn_default_style)
         self.compress_btn.setEnabled(True)
         self.compare_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
 
-        # Show completion message
-        message = f"""
+        if cancelled:
+            pass
+        else:
+            message = f"""
 Compression completed successfully!
 
 Statistics:
@@ -656,16 +765,18 @@ Statistics:
 - Compression ratio: {stats["compression_ratio_percent"]:.1f}%
 
 Output directory: {self.output_directory}
-        """
+            """
 
-        self.log_message(tr("Compression completed successfully!"))
-        QMessageBox.information(self, tr("Compression Complete"), message)
+            self.log_message(tr("Compression completed successfully!"))
+            QMessageBox.information(self, tr("Compression Complete"), message)
+            self.status_label.setText(tr("Compression completed successfully!"))
 
-        # Update status
-        self.status_label.setText(tr("Compression completed successfully!"))
+        self.compression_worker = None
 
     def compression_error(self, error_message: str) -> None:
         """Handle compression error."""
+        self.compress_btn.setText(tr("Start Compression"))
+        self.compress_btn.setStyleSheet(self.compress_btn_default_style)
         self.compress_btn.setEnabled(True)
         self.compare_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
@@ -676,6 +787,7 @@ Output directory: {self.output_directory}
             tr("Compression Error"),
             tr("An error occurred during compression:\n\n{error}").format(error=error_message),
         )
+        self.compression_worker = None
 
     def show_comparison(self) -> None:
         """Show the image comparison window."""

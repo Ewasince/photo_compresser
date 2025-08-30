@@ -10,7 +10,6 @@ class BasicDefaults(TypedDict):
     max_smallest_enabled: bool
     max_smallest_side: int
     output_format: str
-    preserve_structure: bool
 
 
 class JpegDefaults(TypedDict):
@@ -47,7 +46,17 @@ BASIC_DEFAULTS: BasicDefaults = {
     "max_smallest_enabled": True,
     "max_smallest_side": 1080,
     "output_format": "JPEG",
+}
+
+
+class GlobalDefaults(TypedDict):
+    preserve_structure: bool
+    copy_unsupported: bool
+
+
+GLOBAL_DEFAULTS: GlobalDefaults = {
     "preserve_structure": True,
+    "copy_unsupported": True,
 }
 
 JPEG_DEFAULTS: JpegDefaults = {
