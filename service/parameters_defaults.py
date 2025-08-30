@@ -39,6 +39,14 @@ class AvifDefaults(TypedDict):
     tile_cols: int
 
 
+class VideoDefaults(TypedDict):
+    bitrate: int
+    max_width: int
+    max_height: int
+    output_format: str
+    codec: str
+
+
 BASIC_DEFAULTS: BasicDefaults = {
     "quality": 75,
     "max_largest_enabled": False,
@@ -84,4 +92,12 @@ AVIF_DEFAULTS: AvifDefaults = {
     "autotiling": True,
     "tile_rows": 0,
     "tile_cols": 0,
+}
+
+VIDEO_DEFAULTS: VideoDefaults = {
+    "bitrate": 1000,
+    "max_width": 1920,
+    "max_height": 1080,
+    "output_format": "mp4",
+    "codec": "libx264",
 }
