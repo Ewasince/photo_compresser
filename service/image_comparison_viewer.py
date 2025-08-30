@@ -1153,6 +1153,8 @@ class MainWindow(QMainWindow):
             if orig and comp:
                 name = pair.get("original_name", Path(orig).name)
                 profile = pair.get("profile", "Raw")
+                if profile == tr("Raw"):
+                    profile = "Raw"
                 image_pair = ImagePair(orig, comp, name, "Raw", profile)
                 self.image_pairs.append(image_pair)
                 self.carousel.add_image_pair(image_pair)
@@ -1193,6 +1195,8 @@ class MainWindow(QMainWindow):
                 for pair in data.get("image_pairs", []):
                     comp = pair.get("compressed")
                     profile = pair.get("profile", "Raw")
+                    if profile == tr("Raw"):
+                        profile = "Raw"
                     if comp:
                         comp_path = Path(comp)
                         parts = comp_path.parts
@@ -1212,6 +1216,8 @@ class MainWindow(QMainWindow):
                 for pair in data.get("image_pairs", []):
                     comp = pair.get("compressed")
                     profile = pair.get("profile", "Raw")
+                    if profile == tr("Raw"):
+                        profile = "Raw"
                     if comp:
                         comp_path = Path(comp)
                         parts = comp_path.parts

@@ -401,13 +401,13 @@ class ImageCompressor:
                             used_names.add(output_file)
 
                     saved, error = comp.compress_image(src, output_file, img)
-                    profile_name = profile.name if profile else tr("Raw")
+                    profile_name = profile.name if profile else "Raw"
                 if saved:
                     copy_times_from_src(src, saved)
                 return saved, src, profile_name, error
             except Exception as e:  # Handle errors opening the image
                 logger.exception(f"Error processing {src}: {e}")
-                return None, src, tr("Raw"), str(e)
+                return None, src, "Raw", str(e)
 
         if worker_count > 1:
             with ThreadPoolExecutor(max_workers=worker_count) as executor:
