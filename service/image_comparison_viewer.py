@@ -698,6 +698,7 @@ class CompressionStatsDialog(QDialog):
             "autotiling": "Autotiling",
             "tile_rows": "Tile Rows",
             "tile_cols": "Tile Cols",
+            "preserve_structure": "Preserve folder structure",
         }
 
         def format_param_value(key: str, value: Any) -> str:
@@ -717,12 +718,9 @@ class CompressionStatsDialog(QDialog):
                 return tr("Different")
             return ""
 
-        fmt1 = str(settings1.get("output_format", "")).lower()
-        fmt2 = str(settings2.get("output_format", "")).lower()
-
         row = 1
 
-        def add_param_row(key: str) -> None:
+        def add_global_row(key: str) -> None:
             nonlocal row
             val1 = settings1.get(key, "")
             val2 = settings2.get(key, "")
@@ -730,36 +728,112 @@ class CompressionStatsDialog(QDialog):
             val1_label = QLabel(format_param_value(key, val1))
             val2_label = QLabel(format_param_value(key, val2))
             diff_label = QLabel(diff_param_value(key, val1, val2))
-            if val1 == val2 and (key == "output_format" or fmt1 == fmt2):
-                for lbl in (metric_label, val1_label, val2_label, diff_label):
-                    lbl.setStyleSheet("color: #bdbdbd")
             layout.addWidget(metric_label, row, 0)
             layout.addWidget(val1_label, row, 1)
             layout.addWidget(val2_label, row, 2)
             layout.addWidget(diff_label, row, 3)
             row += 1
 
-        add_param_row("output_format")
-        add_param_row("quality")
+        add_global_row("preserve_structure")
 
-        if fmt1 == fmt2:
-            format_specific = {
-                "jpeg": ["progressive", "subsampling", "optimize", "smooth", "keep_rgb"],
-                "webp": ["lossless", "method", "alpha_quality", "exact"],
-                "avif": [
-                    "subsampling",
-                    "speed",
-                    "codec",
-                    "range",
-                    "qmin",
-                    "qmax",
-                    "autotiling",
-                    "tile_rows",
-                    "tile_cols",
-                ],
+        profiles1 = settings1.get("profiles", [])
+        profiles2 = settings2.get("profiles", [])
+        profile_count = max(len(profiles1), len(profiles2))
+
+        for idx in range(profile_count):
+            p1 = profiles1[idx] if idx < len(profiles1) else {}
+            p2 = profiles2[idx] if idx < len(profiles2) else {}
+            header = QLabel(tr("Profile {num}").format(num=idx + 1))
+            header.setStyleSheet("font-weight: bold; margin-top: 10px")
+            layout.addWidget(header, row, 0, 1, 4)
+            row += 1
+
+            fmt1 = str(p1.get("output_format", "")).lower()
+            fmt2 = str(p2.get("output_format", "")).lower()
+
+            def add_param_row(
+                profile_key: str,
+                *,
+                _p1: dict[str, Any] = p1,
+                _p2: dict[str, Any] = p2,
+                _fmt1: str = fmt1,
+                _fmt2: str = fmt2,
+            ) -> None:
+                nonlocal row
+                val1 = _p1.get(profile_key, "")
+                val2 = _p2.get(profile_key, "")
+                metric_label = QLabel(tr(param_label_map.get(profile_key, profile_key)))
+                val1_label = QLabel(format_param_value(profile_key, val1))
+                val2_label = QLabel(format_param_value(profile_key, val2))
+                diff_label = QLabel(diff_param_value(profile_key, val1, val2))
+                if val1 == val2 and (profile_key == "output_format" or _fmt1 == _fmt2):
+                    for lbl in (metric_label, val1_label, val2_label, diff_label):
+                        lbl.setStyleSheet("color: #bdbdbd")
+                layout.addWidget(metric_label, row, 0)
+                layout.addWidget(val1_label, row, 1)
+                layout.addWidget(val2_label, row, 2)
+                layout.addWidget(diff_label, row, 3)
+                row += 1
+
+            add_param_row("output_format")
+            add_param_row("quality")
+
+            if fmt1 == fmt2:
+                format_specific = {
+                    "jpeg": ["progressive", "subsampling", "optimize", "smooth", "keep_rgb"],
+                    "webp": ["lossless", "method", "alpha_quality", "exact"],
+                    "avif": [
+                        "subsampling",
+                        "speed",
+                        "codec",
+                        "range",
+                        "qmin",
+                        "qmax",
+                        "autotiling",
+                        "tile_rows",
+                        "tile_cols",
+                    ],
+                }
+                for key in format_specific.get(fmt1, []):
+                    add_param_row(key)
+
+            cond_label_map = {
+                "smallest_side": "Smallest side",
+                "largest_side": "Largest side",
+                "pixel_count": "Pixels",
+                "aspect_ratio": "Aspect ratio",
+                "orientation": "Orientation",
+                "input_formats": "Input formats",
+                "requires_transparency": "Transparency",
+                "file_size": "File size",
+                "required_exif": "Required EXIF (k=v,...)",
             }
-            for key in format_specific.get(fmt1, []):
-                add_param_row(key)
+
+            def format_condition_value(value: Any) -> str:
+                if isinstance(value, dict) and "op" in value and "value" in value:
+                    return f"{value['op']} {value['value']}"
+                if isinstance(value, list):
+                    return ", ".join(str(v) for v in value)
+                if isinstance(value, bool):
+                    return tr("Requires") if value else tr("No")
+                return str(value)
+
+            cond1 = p1.get("conditions", {}) or {}
+            cond2 = p2.get("conditions", {}) or {}
+            for key, label in cond_label_map.items():
+                val1 = cond1.get(key)
+                val2 = cond2.get(key)
+                if val1 is None and val2 is None:
+                    continue
+                metric_label = QLabel(tr(label))
+                val1_label = QLabel(format_condition_value(val1))
+                val2_label = QLabel(format_condition_value(val2))
+                diff_label = QLabel("" if val1 == val2 else tr("Different"))
+                layout.addWidget(metric_label, row, 0)
+                layout.addWidget(val1_label, row, 1)
+                layout.addWidget(val2_label, row, 2)
+                layout.addWidget(diff_label, row, 3)
+                row += 1
 
         label_map = {
             "input_size_mb": "Input Size",

@@ -18,6 +18,7 @@ from service.compression_profiles import CompressionProfile, select_profile
 from service.constants import SUPPORTED_EXTENSIONS
 from service.file_utils import copy_times_from_src
 from service.save_functions import save_avif, save_jpeg, save_webp
+from service.translator import tr
 
 register_heif_opener()
 
@@ -68,7 +69,6 @@ class ImageCompressor:
         self.quality = profile.quality
         self.max_largest_side = profile.max_largest_side
         self.max_smallest_side = profile.max_smallest_side
-        self.preserve_structure = profile.preserve_structure
         self.output_format = profile.output_format.upper()
         self.set_jpeg_parameters(**profile.jpeg_params)
         self.set_webp_parameters(**profile.webp_params)
@@ -264,6 +264,7 @@ class ImageCompressor:
         output_root: Path,
         profiles: Sequence[CompressionProfile] | None = None,
         progress_callback: Callable[[int, int], None] | None = None,
+        status_callback: Callable[[str], None] | None = None,
         num_workers: int | None = None,
     ) -> tuple[int, int, list[Path], list[Path]]:
         """
@@ -349,7 +350,10 @@ class ImageCompressor:
                 output_file.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(file_path, output_file)
                 copy_times_from_src(file_path, output_file)
-                logger.info(f"Copied non-image file: {file_path.name}")
+                msg = tr("Copied file: {name}").format(name=file_path.name)
+                logger.info(msg)
+                if status_callback:
+                    status_callback(msg)
 
         def _compress_task(comp: "ImageCompressor", src: Path, dst: Path) -> tuple[Path | None, Path]:
             saved = comp.compress_image(src, dst)
@@ -365,10 +369,16 @@ class ImageCompressor:
                     if saved_path:
                         compressed_files += 1
                         compressed_paths.append(saved_path)
-                        logger.info(f"Successfully compressed: {src_file.name}")
+                        msg = tr("Successfully compressed: {name}").format(name=src_file.name)
+                        logger.info(msg)
+                        if status_callback:
+                            status_callback(msg)
                     else:
                         failed_files.append(src_file)
-                        logger.warning(f"Failed to compress: {src_file.name}")
+                        msg = tr("Failed to compress: {name}").format(name=src_file.name)
+                        logger.warning(msg)
+                        if status_callback:
+                            status_callback(msg)
                     processed_files += 1
                     if progress_callback:
                         progress_callback(processed_files, total_files)
@@ -379,15 +389,26 @@ class ImageCompressor:
                     copy_times_from_src(src, saved_path)
                     compressed_files += 1
                     compressed_paths.append(saved_path)
-                    logger.info(f"Successfully compressed: {src.name}")
+                    msg = tr("Successfully compressed: {name}").format(name=src.name)
+                    logger.info(msg)
+                    if status_callback:
+                        status_callback(msg)
                 else:
                     failed_files.append(src)
-                    logger.warning(f"Failed to compress: {src.name}")
+                    msg = tr("Failed to compress: {name}").format(name=src.name)
+                    logger.warning(msg)
+                    if status_callback:
+                        status_callback(msg)
                 processed_files += 1
                 if progress_callback:
                     progress_callback(processed_files, total_files)
 
-        logger.info(f"Compression complete: {compressed_files}/{total_files} files processed")
+        msg = tr("Compression complete: {compressed}/{total} files processed").format(
+            compressed=compressed_files, total=total_files
+        )
+        logger.info(msg)
+        if status_callback:
+            status_callback(msg)
         return total_files, compressed_files, compressed_paths, failed_files
 
     def get_compression_stats(

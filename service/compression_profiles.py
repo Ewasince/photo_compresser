@@ -107,7 +107,6 @@ class CompressionProfile:
     max_largest_side: int | None = None
     max_smallest_side: int | None = None
     output_format: str = "JPEG"
-    preserve_structure: bool = True
     jpeg_params: dict[str, Any] = field(default_factory=dict)
     webp_params: dict[str, Any] = field(default_factory=dict)
     avif_params: dict[str, Any] = field(default_factory=dict)
@@ -136,7 +135,6 @@ def load_profiles(file_path: Path) -> list[CompressionProfile]:
             max_largest_side=item.get("max_largest_side"),
             max_smallest_side=item.get("max_smallest_side"),
             output_format=item.get("output_format", "JPEG"),
-            preserve_structure=item.get("preserve_structure", True),
             jpeg_params=item.get("jpeg_params", {}),
             webp_params=item.get("webp_params", {}),
             avif_params=item.get("avif_params", {}),

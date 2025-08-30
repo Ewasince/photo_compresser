@@ -56,6 +56,12 @@ _translations: dict[str, dict[str, str]] = {
         "Error: {error}": "Ошибка: {error}",
         "Opened comparison window": "Открыто окно сравнения",
         "Error opening comparison: {error}": "Ошибка открытия окна сравнения: {error}",
+        "Successfully compressed: {name}": "Успешно сжат: {name}",
+        "Failed to compress: {name}": "Не удалось сжать: {name}",
+        "Copied file: {name}": "Скопирован файл: {name}",
+        "Compression complete: {compressed}/{total} files processed": (
+            "Сжатие завершено: {compressed}/{total} файлов обработано"
+        ),
         "Loading Previews": "Загрузка превью",
         "Generating previews: {current}/{total}": "Создание превью: {current}/{total}",
         "Image Comparison Viewer": "Просмотр сравнения изображений",
