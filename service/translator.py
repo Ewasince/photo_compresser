@@ -101,6 +101,8 @@ _translations: dict[str, dict[str, str]] = {
         "Different": "Различаются",
         "Output Format": "Формат вывода",
         "Quality": "Качество",
+        "Max Largest Side": "Макс. большая сторона",
+        "Max Smallest Side": "Макс. маленькая сторона",
         "Progressive": "Прогрессивный",
         "Subsampling": "Субдискретизация",
         "Optimize": "Оптимизация",

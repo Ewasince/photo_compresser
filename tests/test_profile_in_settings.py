@@ -24,9 +24,10 @@ def test_profile_saved_in_settings(tmp_path: Path) -> None:
     raw_pairs = create_image_pairs(output_dir, input_dir)
     profile_map = compressor.last_profile_map
     image_pairs = [(orig, comp, profile_map.get(comp, "Raw")) for orig, comp in raw_pairs]
-    save_compression_settings(output_dir, {}, image_pairs, {})
+    save_compression_settings(output_dir, {}, image_pairs, {}, profiles=[default_profile])
 
     settings_file = output_dir / "compression_settings.json"
     with settings_file.open() as f:
         data = json.load(f)
     assert data["image_pairs"][0]["profile"] == "Default"
+    assert data["profiles"][0]["name"] == "Default"

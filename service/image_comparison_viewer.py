@@ -962,6 +962,8 @@ class MainWindow(QMainWindow):
             ]
             | None
         ) = None
+        self.profile_info1: dict[str, dict[str, Any]] = {}
+        self.profile_info2: dict[str, dict[str, Any]] = {}
 
         self.setup_ui()
         self.setup_connections()
@@ -1016,6 +1018,14 @@ class MainWindow(QMainWindow):
         self.status_label = QLabel(tr("No images loaded"))
         self.status_label.setStyleSheet("color: #ccc; font-size: 12px;")
         controls_layout.addWidget(self.status_label)
+
+        self.profile_label1 = QLabel()
+        self.profile_label1.setStyleSheet("color: #ccc; font-size: 12px;")
+        controls_layout.addWidget(self.profile_label1)
+
+        self.profile_label2 = QLabel()
+        self.profile_label2.setStyleSheet("color: #ccc; font-size: 12px;")
+        controls_layout.addWidget(self.profile_label2)
 
         main_layout.addLayout(controls_layout)
 
@@ -1081,6 +1091,10 @@ class MainWindow(QMainWindow):
         self.viewer.update()
         self.stats_data = None
         self.stats_button.setEnabled(False)
+        self.profile_info1.clear()
+        self.profile_info2.clear()
+        self.profile_label1.clear()
+        self.profile_label2.clear()
         self.update_status()
 
     def _preload_thumbnails(self) -> None:
@@ -1116,6 +1130,8 @@ class MainWindow(QMainWindow):
         except Exception:
             return
         self.clear_pairs()
+        self.profile_info1 = {}
+        self.profile_info2 = {p["name"]: p for p in data.get("profiles", [])}
         for pair in data.get("image_pairs", []):
             orig = pair.get("original")
             comp = pair.get("compressed")
@@ -1149,10 +1165,13 @@ class MainWindow(QMainWindow):
 
         profile_map1: dict[Path, str] = {}
         profile_map2: dict[Path, str] = {}
+        self.profile_info1 = {}
+        self.profile_info2 = {}
         if stats1:
             try:
                 with stats1.open() as f:
                     data = json.load(f)
+                self.profile_info1 = {p["name"]: p for p in data.get("profiles", [])}
                 for pair in data.get("image_pairs", []):
                     comp = pair.get("compressed")
                     profile = pair.get("profile", "Raw")
@@ -1164,6 +1183,7 @@ class MainWindow(QMainWindow):
             try:
                 with stats2.open() as f:
                     data = json.load(f)
+                self.profile_info2 = {p["name"]: p for p in data.get("profiles", [])}
                 for pair in data.get("image_pairs", []):
                     comp = pair.get("compressed")
                     profile = pair.get("profile", "Raw")
@@ -1252,13 +1272,46 @@ class MainWindow(QMainWindow):
                     index=self.current_pair_index + 1,
                     total=len(self.image_pairs),
                 )
-                profile_text1 = tr("Profile: {profile}").format(profile=profile_name1)
-                profile_text2 = tr("Profile: {profile}").format(profile=profile_name2)
-                self.status_label.setText(f"{status} - {profile_text1} | {profile_text2}")
+                self.status_label.setText(status)
+                text1 = tr("Profile: {profile}").format(profile=profile_name1)
+                text2 = tr("Profile: {profile}").format(profile=profile_name2)
+                self.profile_label1.setText(f"{text1} |")
+                self.profile_label2.setText(text2)
+                info1 = self.profile_info1.get(current_pair.profile1)
+                info2 = self.profile_info2.get(current_pair.profile2)
+                self.profile_label1.setToolTip(self._format_profile_tooltip(info1))
+                self.profile_label2.setToolTip(self._format_profile_tooltip(info2))
             else:
                 self.status_label.setText(tr("Loaded {count} image pairs").format(count=len(self.image_pairs)))
+                self.profile_label1.clear()
+                self.profile_label2.clear()
         else:
             self.status_label.setText(tr("No images loaded"))
+            self.profile_label1.clear()
+            self.profile_label2.clear()
+
+    def _format_profile_tooltip(self, profile: dict[str, Any] | None) -> str:
+        if not profile:
+            return tr("Raw")
+        lines: list[str] = []
+
+        def add(field: str, label_key: str | None = None) -> None:
+            value = profile.get(field)
+            if value is not None:
+                label = tr(label_key or field.replace("_", " ").title())
+                lines.append(f"{label}: {value}")
+
+        add("quality", "Quality")
+        add("max_largest_side", "Max Largest Side")
+        add("max_smallest_side", "Max Smallest Side")
+        add("output_format", "Output Format")
+        for fmt in ("jpeg_params", "webp_params", "avif_params"):
+            params = profile.get(fmt)
+            if params:
+                for key, val in params.items():
+                    label = tr(key.replace("_", " ").title())
+                    lines.append(f"{label}: {val}")
+        return "\n".join(lines)
 
 
 def main() -> None:

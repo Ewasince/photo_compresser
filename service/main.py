@@ -126,6 +126,7 @@ class CompressionWorker(QThread):
                     stats,
                     failed_files,
                     stats["conversion_time"],
+                    self.profiles,
                 )
 
             if self._stop_event.is_set():

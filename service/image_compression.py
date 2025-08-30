@@ -8,6 +8,7 @@ import logging
 import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import asdict
 from pathlib import Path
 from threading import Event, Lock
 from typing import Any, Callable, Sequence
@@ -590,6 +591,7 @@ def save_compression_settings(
     stats: dict[str, Any],
     failed_files: list[tuple[Path, str]] | None = None,
     conversion_time: str | None = None,
+    profiles: Sequence[CompressionProfile] | None = None,
 ) -> Path | None:
     """
     Save compression settings and image pairs to a JSON file.
@@ -602,6 +604,7 @@ def save_compression_settings(
         failed_files: List of tuples ``(path, error)`` for images that
             failed to compress
         conversion_time: Human-readable duration of the compression process
+        profiles: Compression profiles used in this run
     """
     import json
     from datetime import datetime
@@ -625,6 +628,9 @@ def save_compression_settings(
         "failed_files": [{"path": str(path), "error": error} for path, error in failed_files],
         "stats": stats,
     }
+
+    if profiles:
+        settings_data["profiles"] = [asdict(p) for p in profiles]
 
     if conversion_time is not None:
         settings_data["conversion_time"] = conversion_time
