@@ -154,6 +154,7 @@ class MainWindow(QMainWindow):
         self.compression_worker: CompressionWorker | None = None
         self.output_directory: Path | None = None
         self.input_directory: Path | None = None
+        self.progress_start_time: datetime | None = None
 
         self.setup_ui()
         self.setup_connections()
@@ -704,6 +705,8 @@ class MainWindow(QMainWindow):
         self.compression_worker.compression_finished.connect(self.compression_finished)
         self.compression_worker.error_occurred.connect(self.compression_error)
 
+        self.progress_start_time = datetime.now()
+
         # Update UI
         self.compress_btn.setText(tr("Abort Compression"))
         self.compress_btn.setStyleSheet(self.abort_btn_style)
@@ -719,7 +722,16 @@ class MainWindow(QMainWindow):
         """Update progress bar."""
         self.progress_bar.setRange(0, total)
         self.progress_bar.setValue(current)
-        self.status_label.setText(tr("Processed {current}/{total} files").format(current=current, total=total))
+        if current > 0 and self.progress_start_time:
+            elapsed = datetime.now() - self.progress_start_time
+            remaining = elapsed * (total - current) / current
+            remaining_text = format_timedelta(remaining)
+            status = tr("Processed {current}/{total} files (≈ {remaining} left)").format(
+                current=current, total=total, remaining=remaining_text
+            )
+        else:
+            status = tr("Processed {current}/{total} files").format(current=current, total=total)
+        self.status_label.setText(status)
 
     def update_status(self, message: str) -> None:
         """Update status message."""
@@ -729,6 +741,7 @@ class MainWindow(QMainWindow):
     def compression_finished(self, stats: dict) -> None:
         """Handle compression completion."""
         cancelled = self.compression_worker.cancelled if self.compression_worker else False
+        self.progress_start_time = None
 
         # Update UI
         self.compress_btn.setText(tr("Start Compression"))
