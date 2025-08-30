@@ -55,6 +55,7 @@ _translations: dict[str, dict[str, str]] = {
         "Loaded {count} profiles from {file}": "Загружено {count} профилей из {file}",
         "Starting compression process...": "Запуск процесса сжатия...",
         "Stopping compression...": "Остановка сжатия...",
+        "Waiting for compression to stop; start button disabled": "Ожидание остановки сжатия; кнопка отключена",
         "Error: {error}": "Ошибка: {error}",
         "Opened comparison window": "Открыто окно сравнения",
         "Error opening comparison: {error}": "Ошибка открытия окна сравнения: {error}",

@@ -640,6 +640,7 @@ class MainWindow(QMainWindow):
             self.status_label.setText(tr("Stopping compression..."))
             self.compression_worker.stop()
             self.compress_btn.setEnabled(False)
+            self.log_message(tr("Waiting for compression to stop; start button disabled"))
             return
 
         if self.input_directory is None:
@@ -737,8 +738,7 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(False)
 
         if cancelled:
-            self.log_message(tr("Compression aborted by user"))
-            self.status_label.setText(tr("Compression aborted by user"))
+            pass
         else:
             message = f"""
 Compression completed successfully!
