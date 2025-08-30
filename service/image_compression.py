@@ -364,8 +364,6 @@ class ImageCompressor:
                     msg = tr("Skipped unsupported file: {name}").format(name=file_path.name)
 
                 logger.info(msg)
-                if status_callback:
-                    status_callback(msg)
 
         def _compress_task(comp: "ImageCompressor", src: Path, dst: Path) -> tuple[Path | None, Path]:
             saved = comp.compress_image(src, dst)
@@ -386,14 +384,10 @@ class ImageCompressor:
                         compressed_paths.append(saved_path)
                         msg = tr("Successfully compressed: {name}").format(name=src_file.name)
                         logger.info(msg)
-                        if status_callback:
-                            status_callback(msg)
                     else:
                         failed_files.append(src_file)
                         msg = tr("Failed to compress: {name}").format(name=src_file.name)
                         logger.warning(msg)
-                        if status_callback:
-                            status_callback(msg)
                     processed_files += 1
                     if progress_callback:
                         progress_callback(processed_files, total_files)
@@ -408,14 +402,10 @@ class ImageCompressor:
                     compressed_paths.append(saved_path)
                     msg = tr("Successfully compressed: {name}").format(name=src.name)
                     logger.info(msg)
-                    if status_callback:
-                        status_callback(msg)
                 else:
                     failed_files.append(src)
                     msg = tr("Failed to compress: {name}").format(name=src.name)
                     logger.warning(msg)
-                    if status_callback:
-                        status_callback(msg)
                 processed_files += 1
                 if progress_callback:
                     progress_callback(processed_files, total_files)
