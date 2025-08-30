@@ -134,12 +134,16 @@ class ThumbnailRunnable(QRunnable):
         self.observer = observer
 
     def run(self) -> None:  # pragma: no cover - thread pool execution
-        self.pair.ensure_thumbnail_cached()
-        QMetaObject.invokeMethod(
-            self.observer,
-            "report_done",
-            Qt.ConnectionType.QueuedConnection,
-        )  # type: ignore[call-overload]
+        try:
+            self.pair.ensure_thumbnail_cached()
+        except Exception:  # pragma: no cover - log and continue
+            logger.exception("Failed to generate thumbnail for %s", getattr(self.pair, "name", "pair"))
+        finally:
+            QMetaObject.invokeMethod(
+                self.observer,
+                "report_done",
+                Qt.ConnectionType.QueuedConnection,
+            )  # type: ignore[call-overload]
 
 
 FORMATS_PATTERNS = " ".join(f"*.{f}" for f in SUPPORTED_EXTENSIONS)
