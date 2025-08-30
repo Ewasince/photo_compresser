@@ -913,7 +913,14 @@ class CompressionStatsDialog(QDialog):
         for idx in range(profile_count):
             p1 = profiles1[idx] if idx < len(profiles1) else {}
             p2 = profiles2[idx] if idx < len(profiles2) else {}
-            header = QLabel(tr("Profile {num}").format(num=idx + 1))
+
+            default_p_name = tr("Profile {num}").format(num=idx + 1)
+            p1_name = p1.get("name", default_p_name)
+            p2_name = p2.get("name", default_p_name)
+            if p1_name != p2_name:
+                header = QLabel(tr("Profiles: {names}").format(names=f"{p1_name}, {p2_name}"))
+            else:
+                header = QLabel(tr("Profile: {name}").format(name=p1_name))
             header.setStyleSheet("font-weight: bold; margin-top: 10px")
             layout.addWidget(header, row, 0, 1, 4)
             row += 1

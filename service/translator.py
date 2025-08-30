@@ -22,6 +22,7 @@ _translations: dict[str, dict[str, str]] = {
         "Add Profile": "Добавить профиль",
         "Default": "По умолчанию",
         "Profile {num}": "Профиль {num}",
+        "Profiles: {names}": "Профили {names}",
         "Reset Settings": "Сбросить настройки",
         "Progress": "Прогресс",
         "Ready to compress images": "Готов к сжатию изображений",
