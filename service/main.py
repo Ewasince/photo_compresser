@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QToolButton,
     QVBoxLayout,
-    QWidget,
+    QWidget, QSizePolicy,
 )
 
 from service.compression_profiles import (
@@ -395,8 +395,6 @@ class MainWindow(QMainWindow):
         self.status_label.setStyleSheet("color: #666; font-style: italic;")
         progress_layout.addWidget(self.status_label)
 
-        main_layout.addWidget(self.progress_group)
-
         # Action buttons
         button_layout = QHBoxLayout()
 
@@ -468,10 +466,11 @@ class MainWindow(QMainWindow):
 
         button_layout.addWidget(self.compress_btn)
         button_layout.addWidget(self.compare_btn)
-        main_layout.addLayout(button_layout)
 
         # Log section
         self.log_group = QGroupBox(tr("Log"))
+        self.log_group.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.log_group.setMaximumHeight(200)
         log_layout = QVBoxLayout(self.log_group)
 
         self.log_text = QTextEdit()
@@ -487,7 +486,14 @@ class MainWindow(QMainWindow):
         """)
         log_layout.addWidget(self.log_text)
 
-        main_layout.addWidget(self.log_group)
+        # Group progress, buttons, and log together at the bottom
+        bottom_layout = QVBoxLayout()
+        bottom_layout.addWidget(self.progress_group)
+        bottom_layout.addLayout(button_layout)
+        bottom_layout.addWidget(self.log_group)
+
+        main_layout.addStretch(1)
+        main_layout.addLayout(bottom_layout)
 
     def setup_connections(self) -> None:
         """Set up signal connections."""
