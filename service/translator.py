@@ -58,7 +58,7 @@ _translations: dict[str, dict[str, str]] = {
         "Error: {error}": "Ошибка: {error}",
         "Opened comparison window": "Открыто окно сравнения",
         "Error opening comparison: {error}": "Ошибка открытия окна сравнения: {error}",
-        "Successfully compressed: {name}": "Успешно сжат: {name}",
+        "Successfully compressed: {name} with profile {profile}": "Успешно сжат: {name} с профилем {profile}",
         "Failed to compress: {name}": "Не удалось сжать: {name}",
         "Compression aborted by user": "Сжатие прервано пользователем",
         "Copied file: {name}": "Скопирован файл: {name}",

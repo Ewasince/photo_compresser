@@ -365,7 +365,7 @@ class ImageCompressor:
                 if log_callback:
                     log_callback(msg)
 
-        def _compress_task(src: Path) -> tuple[Path | None, Path]:
+        def _compress_task(src: Path) -> tuple[Path | None, Path, str]:
             with Image.open(src) as img:
                 profile = select_profile(img, profiles) if profiles else None
                 comp = _clone_with_profile(profile)
@@ -385,9 +385,10 @@ class ImageCompressor:
                         used_names.add(output_file)
 
                 saved = comp.compress_image(src, output_file, img)
+                profile_name = profile.name if profile else tr("Default")
             if saved:
                 copy_times_from_src(src, saved)
-            return saved, src
+            return saved, src, profile_name
 
         if worker_count > 1:
             with ThreadPoolExecutor(max_workers=worker_count) as executor:
@@ -396,11 +397,13 @@ class ImageCompressor:
                     if stop_event and stop_event.is_set():
                         executor.shutdown(wait=False, cancel_futures=True)
                         break
-                    saved_path, src_file = future.result()
+                    saved_path, src_file, profile_name = future.result()
                     if saved_path:
                         compressed_files += 1
                         compressed_paths.append(saved_path)
-                        msg = tr("Successfully compressed: {name}").format(name=src_file.name)
+                        msg = tr("Successfully compressed: {name} with profile {profile}").format(
+                            name=src_file.name, profile=profile_name
+                        )
                         logger.info(msg)
                     else:
                         failed_files.append(src_file)
@@ -415,11 +418,13 @@ class ImageCompressor:
             for src in tasks:
                 if stop_event and stop_event.is_set():
                     break
-                saved_path, _ = _compress_task(src)
+                saved_path, _, profile_name = _compress_task(src)
                 if saved_path:
                     compressed_files += 1
                     compressed_paths.append(saved_path)
-                    msg = tr("Successfully compressed: {name}").format(name=src.name)
+                    msg = tr("Successfully compressed: {name} with profile {profile}").format(
+                        name=src.name, profile=profile_name
+                    )
                     logger.info(msg)
                 else:
                     failed_files.append(src)
