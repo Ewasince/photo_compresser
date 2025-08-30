@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from threading import Event
 
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal, QStandardPaths
 from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -694,7 +694,8 @@ class MainWindow(QMainWindow):
         self.log_message(tr("Saved {count} profiles to {file}").format(count=len(profiles), file=file_name))
 
     def load_profiles(self) -> None:
-        file_name, _ = QFileDialog.getOpenFileName(self, tr("Load Profiles"), "", "JSON Files (*.json)")
+        documents_dir = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
+        file_name, _ = QFileDialog.getOpenFileName(self, tr("Load Profiles"), documents_dir, "JSON Files (*.json)")
         if not file_name:
             return
         profiles = load_profiles(Path(file_name))
