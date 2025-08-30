@@ -108,7 +108,9 @@ class CompressionWorker(QThread):
             stats["conversion_time"] = format_timedelta(elapsed)
 
             # Create image pairs for settings file
+            self.status_updated.emit(tr("Generating image pairs..."))
             image_pairs = create_image_pairs(self.output_dir, self.input_dir)
+            self.status_updated.emit(tr("Saving compression settings..."))
 
             # Save compression settings
             if image_pairs or failed_files:

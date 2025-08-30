@@ -63,6 +63,8 @@ _translations: dict[str, dict[str, str]] = {
         "Compression aborted by user": "Сжатие прервано пользователем",
         "Copied file: {name}": "Скопирован файл: {name}",
         "Skipped unsupported file: {name}": "Пропущен неподдерживаемый файл: {name}",
+        "Generating image pairs...": "Создание пар изображений...",
+        "Saving compression settings...": "Сохранение настроек сжатия...",
         "Compression complete: {compressed}/{total} files processed": (
             "Сжатие завершено: {compressed}/{total} файлов обработано"
         ),
