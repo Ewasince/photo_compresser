@@ -5,7 +5,9 @@ A PySide6 application for comparing pairs of images with interactive features.
 """
 
 import json
+import logging
 import sys
+from dataclasses import asdict
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -47,10 +49,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from service.compression_profiles import ProfileConditions
 from service.constants import SUPPORTED_EXTENSIONS
 from service.file_utils import format_timedelta
 from service.image_pair import ImagePair
+from service.parameters_defaults import AVIF_DEFAULTS, JPEG_DEFAULTS, WEBP_DEFAULTS
 from service.translator import tr
+
+logger = logging.getLogger(__name__)
 
 BUTTON_STYLE = """
     QPushButton {
@@ -128,12 +134,16 @@ class ThumbnailRunnable(QRunnable):
         self.observer = observer
 
     def run(self) -> None:  # pragma: no cover - thread pool execution
-        self.pair.ensure_thumbnail_cached()
-        QMetaObject.invokeMethod(
-            self.observer,
-            "report_done",
-            Qt.ConnectionType.QueuedConnection,
-        )  # type: ignore[call-overload]
+        try:
+            self.pair.ensure_thumbnail_cached()
+        except Exception:  # pragma: no cover - log and continue
+            logger.exception("Failed to generate thumbnail for %s", getattr(self.pair, "name", "pair"))
+        finally:
+            QMetaObject.invokeMethod(
+                self.observer,
+                "report_done",
+                Qt.ConnectionType.QueuedConnection,
+            )  # type: ignore[call-overload]
 
 
 FORMATS_PATTERNS = " ".join(f"*.{f}" for f in SUPPORTED_EXTENSIONS)
@@ -962,6 +972,10 @@ class MainWindow(QMainWindow):
             ]
             | None
         ) = None
+        self.profile_info1: dict[str, dict[str, Any]] = {}
+        self.profile_info2: dict[str, dict[str, Any]] = {}
+        self.profile_list1: list[dict[str, Any]] = []
+        self.profile_list2: list[dict[str, Any]] = []
 
         self.setup_ui()
         self.setup_connections()
@@ -1016,6 +1030,18 @@ class MainWindow(QMainWindow):
         self.status_label = QLabel(tr("No images loaded"))
         self.status_label.setStyleSheet("color: #ccc; font-size: 12px;")
         controls_layout.addWidget(self.status_label)
+
+        self.profile_label1 = QLabel()
+        self.profile_label1.setStyleSheet("color: #ccc; font-size: 12px;")
+        controls_layout.addWidget(self.profile_label1)
+
+        self.profile_sep = QLabel("|")
+        self.profile_sep.setStyleSheet("color: #ccc; font-size: 12px;")
+        controls_layout.addWidget(self.profile_sep)
+
+        self.profile_label2 = QLabel()
+        self.profile_label2.setStyleSheet("color: #ccc; font-size: 12px;")
+        controls_layout.addWidget(self.profile_label2)
 
         main_layout.addLayout(controls_layout)
 
@@ -1081,6 +1107,12 @@ class MainWindow(QMainWindow):
         self.viewer.update()
         self.stats_data = None
         self.stats_button.setEnabled(False)
+        self.profile_info1.clear()
+        self.profile_info2.clear()
+        self.profile_list1.clear()
+        self.profile_list2.clear()
+        self.profile_label1.clear()
+        self.profile_label2.clear()
         self.update_status()
 
     def _preload_thumbnails(self) -> None:
@@ -1116,12 +1148,20 @@ class MainWindow(QMainWindow):
         except Exception:
             return
         self.clear_pairs()
+        self.profile_info1 = {}
+        self.profile_info2 = {p["name"]: p for p in data.get("profiles", [])}
+        self.profile_list1 = []
+        self.profile_list2 = data.get("profiles", [])
         for pair in data.get("image_pairs", []):
             orig = pair.get("original")
             comp = pair.get("compressed")
             if orig and comp:
                 name = pair.get("original_name", Path(orig).name)
-                image_pair = ImagePair(orig, comp, name)
+                profile = pair.get("profile", "Raw")
+                if profile == tr("Raw"):
+                    profile = "Raw"
+                conds = pair.get("condition_results", {})
+                image_pair = ImagePair(orig, comp, name, "Raw", profile, {}, conds)
                 self.image_pairs.append(image_pair)
                 self.carousel.add_image_pair(image_pair)
         self._preload_thumbnails()
@@ -1146,6 +1186,61 @@ class MainWindow(QMainWindow):
         stats1: Path | None = stats1_file if stats1_file.exists() else None
         stats2: Path | None = stats2_file if stats2_file.exists() else None
 
+        profile_map1: dict[str, str] = {}
+        profile_map2: dict[str, str] = {}
+        condition_map1: dict[str, dict[str, dict[str, bool]]] = {}
+        condition_map2: dict[str, dict[str, dict[str, bool]]] = {}
+        self.profile_info1 = {}
+        self.profile_info2 = {}
+        self.profile_list1 = []
+        self.profile_list2 = []
+        if stats1:
+            try:
+                with stats1.open() as f:
+                    data = json.load(f)
+                self.profile_info1 = {p["name"]: p for p in data.get("profiles", [])}
+                self.profile_list1 = data.get("profiles", [])
+                for pair in data.get("image_pairs", []):
+                    comp = pair.get("compressed")
+                    profile = pair.get("profile", "Raw")
+                    conds = pair.get("condition_results", {})
+                    if profile == tr("Raw"):
+                        profile = "Raw"
+                    if comp:
+                        comp_path = Path(comp)
+                        parts = comp_path.parts
+                        start = 1 if comp_path.is_absolute() else 0
+                        for i in range(start, len(parts)):
+                            suffix = Path(*parts[i:]).as_posix()
+                            profile_map1[suffix] = profile
+                            condition_map1[suffix] = conds
+            except Exception:
+                profile_map1 = {}
+                self.profile_list1 = []
+        if stats2:
+            try:
+                with stats2.open() as f:
+                    data = json.load(f)
+                self.profile_info2 = {p["name"]: p for p in data.get("profiles", [])}
+                self.profile_list2 = data.get("profiles", [])
+                for pair in data.get("image_pairs", []):
+                    comp = pair.get("compressed")
+                    profile = pair.get("profile", "Raw")
+                    conds = pair.get("condition_results", {})
+                    if profile == tr("Raw"):
+                        profile = "Raw"
+                    if comp:
+                        comp_path = Path(comp)
+                        parts = comp_path.parts
+                        start = 1 if comp_path.is_absolute() else 0
+                        for i in range(start, len(parts)):
+                            suffix = Path(*parts[i:]).as_posix()
+                            profile_map2[suffix] = profile
+                            condition_map2[suffix] = conds
+            except Exception:
+                profile_map2 = {}
+                self.profile_list2 = []
+
         for file1 in dir1.rglob("*"):
             if not file1.is_file() or file1.suffix.lower() not in SUPPORTED_EXTENSIONS:
                 continue
@@ -1159,7 +1254,13 @@ class MainWindow(QMainWindow):
                         break
             if file2.exists():
                 pair_name = rel.as_posix()
-                image_pair = ImagePair(str(file1), str(file2), pair_name)
+                profile_key1 = file1.relative_to(dir1).as_posix()
+                profile_key2 = file2.relative_to(dir2).as_posix()
+                profile1 = profile_map1.get(profile_key1, "Raw")
+                profile2 = profile_map2.get(profile_key2, "Raw")
+                cond1 = condition_map1.get(profile_key1, {})
+                cond2 = condition_map2.get(profile_key2, {})
+                image_pair = ImagePair(str(file1), str(file2), pair_name, profile1, profile2, cond1, cond2)
                 self.image_pairs.append(image_pair)
                 self.carousel.add_image_pair(image_pair)
 
@@ -1217,17 +1318,153 @@ class MainWindow(QMainWindow):
         if self.image_pairs:
             current_pair = self.image_pairs[self.current_pair_index] if self.current_pair_index >= 0 else None
             if current_pair:
-                self.status_label.setText(
-                    tr("Showing: {name} ({index}/{total})").format(
-                        name=current_pair.name,
-                        index=self.current_pair_index + 1,
-                        total=len(self.image_pairs),
-                    )
+                profile_name1 = tr("Raw") if current_pair.profile1 == "Raw" else current_pair.profile1
+                profile_name2 = tr("Raw") if current_pair.profile2 == "Raw" else current_pair.profile2
+                status = tr("Showing: {name} ({index}/{total})").format(
+                    name=current_pair.name,
+                    index=self.current_pair_index + 1,
+                    total=len(self.image_pairs),
+                )
+                self.status_label.setText(status)
+                text1 = tr("Profile: {profile}").format(profile=profile_name1)
+                text2 = tr("Profile: {profile}").format(profile=profile_name2)
+                self.profile_label1.setText(text1)
+                self.profile_label2.setText(text2)
+                self.profile_sep.setText("|")
+                self.profile_label1.setToolTip(
+                    self._format_profile_tooltip(self.profile_list1, current_pair.profile1, current_pair.conditions1)
+                )
+                self.profile_label2.setToolTip(
+                    self._format_profile_tooltip(self.profile_list2, current_pair.profile2, current_pair.conditions2)
                 )
             else:
                 self.status_label.setText(tr("Loaded {count} image pairs").format(count=len(self.image_pairs)))
+                self.profile_label1.clear()
+                self.profile_label2.clear()
+                self.profile_sep.clear()
+                self.profile_label1.setToolTip("")
+                self.profile_label2.setToolTip("")
         else:
             self.status_label.setText(tr("No images loaded"))
+            self.profile_label1.clear()
+            self.profile_label2.clear()
+            self.profile_sep.clear()
+            self.profile_label1.setToolTip("")
+            self.profile_label2.setToolTip("")
+
+    def _format_profile_tooltip(
+        self,
+        profiles: list[dict[str, Any]],
+        selected_name: str,
+        evaluations: dict[str, dict[str, bool]],
+    ) -> str:
+        if not profiles and selected_name == "Raw":
+            return tr("Raw")
+
+        lines: list[str] = []
+        selected = next((p for p in profiles if p.get("name") == selected_name), None)
+        if selected:
+
+            def add(field: str, label_key: str | None = None) -> None:
+                value = selected.get(field)
+                if value is not None:
+                    label = tr(label_key or field.replace("_", " ").title())
+                    lines.append(f"{label}: {value}")
+
+            add("quality", "Quality")
+            add("max_largest_side", "Max Largest Side")
+            add("max_smallest_side", "Max Smallest Side")
+            add("output_format", "Output Format")
+            format_defaults = {
+                "jpeg_params": JPEG_DEFAULTS,
+                "webp_params": WEBP_DEFAULTS,
+                "avif_params": AVIF_DEFAULTS,
+            }
+            for fmt, defaults in format_defaults.items():
+                params = selected.get(fmt) or {}
+                for key, val in params.items():
+                    if defaults.get(key) != val:
+                        label = tr(key.replace("_", " ").title())
+                        lines.append(f"{label}: {val}")
+
+            selected_eval = evaluations.get(selected_name, {})
+            if selected.get("conditions") and selected_eval:
+                conditions = ProfileConditions.from_dict(selected.get("conditions", {}))
+                cond_dict = asdict(conditions)
+                lines.append("")
+                lines.append(tr("Conditions") + ":")
+                passed: list[str] = []
+                failed: list[str] = []
+                for field, ok in selected_eval.items():
+                    expected = cond_dict.get(field)
+                    if expected is None:
+                        continue
+                    if isinstance(expected, dict) and "op" in expected and "value" in expected:
+                        cond_repr = f"{expected['op']} {expected['value']}"
+                    elif isinstance(expected, list):
+                        cond_repr = ", ".join(str(v) for v in expected)
+                    elif isinstance(expected, dict):
+                        cond_repr = ", ".join(f"{k}={v}" for k, v in expected.items())
+                    else:
+                        cond_repr = str(expected)
+                    label = tr(field.replace("_", " ").title())
+                    entry = f"{label} {cond_repr}"
+                    if ok:
+                        passed.append(entry)
+                    else:
+                        failed.append(entry)
+                if passed:
+                    lines.append(tr("Passed") + ":")
+                    for cond in passed:
+                        lines.append(f"✓ {cond}")
+                if failed:
+                    lines.append(tr("Failed") + ":")
+                    for cond in failed:
+                        lines.append(f"✗ {cond}")
+        else:
+            lines.append(tr("Raw"))
+
+        for profile in reversed(profiles):
+            name = profile.get("name", "")
+            if name == selected_name:
+                break
+            evals = evaluations.get(name, {})
+            lines.append("")
+            lines.append(tr("Profile: {profile}").format(profile=name))
+            if evals:
+                lines.append(tr("Conditions") + ":")
+                conditions = ProfileConditions.from_dict(profile.get("conditions", {}))
+                cond_dict = asdict(conditions)
+                passed_prev: list[str] = []
+                failed_prev: list[str] = []
+                for field, ok in evals.items():
+                    expected = cond_dict.get(field)
+                    if expected is None:
+                        continue
+                    if isinstance(expected, dict) and "op" in expected and "value" in expected:
+                        cond_repr = f"{expected['op']} {expected['value']}"
+                    elif isinstance(expected, list):
+                        cond_repr = ", ".join(str(v) for v in expected)
+                    elif isinstance(expected, dict):
+                        cond_repr = ", ".join(f"{k}={v}" for k, v in expected.items())
+                    else:
+                        cond_repr = str(expected)
+                    label = tr(field.replace("_", " ").title())
+                    entry = f"{label} {cond_repr}"
+                    if ok:
+                        passed_prev.append(entry)
+                    else:
+                        failed_prev.append(entry)
+                if passed_prev:
+                    lines.append(tr("Passed") + ":")
+                    for cond in passed_prev:
+                        lines.append(f"✓ {cond}")
+                if failed_prev:
+                    lines.append(tr("Failed") + ":")
+                    for cond in failed_prev:
+                        lines.append(f"✗ {cond}")
+
+        return "\n".join(lines)
 
 
 def main() -> None:

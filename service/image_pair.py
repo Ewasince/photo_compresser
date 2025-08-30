@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from PIL import Image
 from PySide6.QtCore import QSize
@@ -93,10 +93,18 @@ class ImagePair:
     image1_path: str
     image2_path: str
     name: str = ""
+    profile1: str = "Raw"
+    profile2: str = "Raw"
+    conditions1: dict[str, dict[str, bool]] = field(default_factory=dict)
+    conditions2: dict[str, dict[str, bool]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:  # pragma: no cover - simple post-init
         if not self.name:
             self.name = f"{os.path.basename(self.image1_path)} vs {os.path.basename(self.image2_path)}"
+        if not self.profile1:
+            self.profile1 = "Raw"
+        if not self.profile2:
+            self.profile2 = "Raw"
 
     def get_pixmap1(self) -> QPixmap:
         """Get the first image pixmap using the cache."""

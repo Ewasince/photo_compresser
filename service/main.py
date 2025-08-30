@@ -112,7 +112,12 @@ class CompressionWorker(QThread):
 
             # Create image pairs for settings file
             self.status_updated.emit(tr("Generating image pairs..."))
-            image_pairs = create_image_pairs(self.output_dir, self.input_dir)
+            raw_pairs = create_image_pairs(self.output_dir, self.input_dir)
+            profile_map = self.compressor.last_profile_map
+            condition_map = self.compressor.last_condition_map
+            image_pairs = [
+                (orig, comp, profile_map.get(comp, "Raw"), condition_map.get(comp, {})) for orig, comp in raw_pairs
+            ]
             self.status_updated.emit(tr("Saving compression settings..."))
 
             # Save compression settings
@@ -124,6 +129,7 @@ class CompressionWorker(QThread):
                     stats,
                     failed_files,
                     stats["conversion_time"],
+                    self.profiles,
                 )
 
             if self._stop_event.is_set():

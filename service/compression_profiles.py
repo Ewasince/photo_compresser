@@ -46,6 +46,47 @@ class ProfileConditions:
             "==": actual == cond.value,
         }.get(cond.op, False)
 
+    def evaluate(
+        self,
+        width: int,
+        height: int,
+        *,
+        image_format: str | None = None,
+        has_transparency: bool | None = None,
+        file_size: int | None = None,
+        exif: dict[str, Any] | None = None,
+    ) -> dict[str, tuple[Any, bool]]:
+        """Return detailed evaluation of conditions against the image."""
+        smallest_side = min(width, height)
+        largest_side = max(width, height)
+        pixels = width * height
+        aspect_ratio = width / height
+        orientation = "square" if width == height else ("landscape" if width > height else "portrait")
+
+        results: dict[str, tuple[Any, bool]] = {}
+        if self.smallest_side:
+            results["smallest_side"] = (self.smallest_side, self._match(self.smallest_side, smallest_side))
+        if self.largest_side:
+            results["largest_side"] = (self.largest_side, self._match(self.largest_side, largest_side))
+        if self.pixel_count:
+            results["pixel_count"] = (self.pixel_count, self._match(self.pixel_count, pixels))
+        if self.aspect_ratio:
+            results["aspect_ratio"] = (self.aspect_ratio, self._match(self.aspect_ratio, aspect_ratio))
+        if self.orientation is not None:
+            results["orientation"] = (self.orientation, orientation == self.orientation)
+        if self.input_formats is not None:
+            ok = image_format is not None and image_format.upper() in [f.upper() for f in self.input_formats]
+            results["input_formats"] = (self.input_formats, ok)
+        if self.requires_transparency is not None:
+            ok = has_transparency is not None and has_transparency == self.requires_transparency
+            results["requires_transparency"] = (self.requires_transparency, ok)
+        if self.file_size:
+            results["file_size"] = (self.file_size, self._match(self.file_size, file_size))
+        if self.required_exif:
+            ok = exif is not None and all(exif.get(k) == v for k, v in self.required_exif.items())
+            results["required_exif"] = (self.required_exif, ok)
+        return results
+
     def matches(
         self,
         width: int,
@@ -56,28 +97,16 @@ class ProfileConditions:
         file_size: int | None = None,
         exif: dict[str, Any] | None = None,
     ) -> bool:
-        """Return ``True`` if the image properties satisfy the conditions."""
-        smallest_side = min(width, height)
-        largest_side = max(width, height)
-        pixels = width * height
-        aspect_ratio = width / height
-        orientation = "square" if width == height else ("landscape" if width > height else "portrait")
-
-        conditions = [
-            self._match(self.smallest_side, smallest_side),
-            self._match(self.largest_side, largest_side),
-            self._match(self.pixel_count, pixels),
-            self._match(self.aspect_ratio, aspect_ratio),
-            self.orientation is None or orientation == self.orientation,
-            self.input_formats is None
-            or (image_format is not None and image_format.upper() in [f.upper() for f in self.input_formats]),
-            self.requires_transparency is None
-            or (has_transparency is not None and has_transparency == self.requires_transparency),
-            self._match(self.file_size, file_size),
-            not self.required_exif
-            or (exif is not None and all(exif.get(k) == v for k, v in self.required_exif.items())),
-        ]
-        return all(conditions)
+        """Return ``True`` if the image properties satisfy all conditions."""
+        evaluations = self.evaluate(
+            width,
+            height,
+            image_format=image_format,
+            has_transparency=has_transparency,
+            file_size=file_size,
+            exif=exif,
+        )
+        return all(result for _cond, result in evaluations.values())
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProfileConditions:

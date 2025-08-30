@@ -91,6 +91,8 @@ _translations: dict[str, dict[str, str]] = {
         "Select Second Directory": "Выберите вторую папку",
         "Showing: {name} ({index}/{total})": "Показ: {name} ({index}/{total})",
         "Loaded {count} image pairs": "Загружено {count} пар изображений",
+        "Profile: {profile}": "Профиль: {profile}",
+        "Raw": "Оригинальное фото",
         "Compression Statistics": "Статистика сжатия",
         "Metric": "Метрика",
         "Directory 1": "Папка 1",
@@ -99,6 +101,8 @@ _translations: dict[str, dict[str, str]] = {
         "Different": "Различаются",
         "Output Format": "Формат вывода",
         "Quality": "Качество",
+        "Max Largest Side": "Макс. большая сторона",
+        "Max Smallest Side": "Макс. маленькая сторона",
         "Progressive": "Прогрессивный",
         "Subsampling": "Субдискретизация",
         "Optimize": "Оптимизация",
@@ -159,6 +163,8 @@ _translations: dict[str, dict[str, str]] = {
         "Required EXIF (k=v,...)": "Требуемый EXIF (k=v,...)",
         "Conditions": "Условия",
         "Conditions (default profile - always used)": "Условия (профиль по умолчанию — используется всегда)",
+        "Passed": "Сработали",
+        "Failed": "Не сработали",
     }
 }
 
