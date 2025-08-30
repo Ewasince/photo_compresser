@@ -20,11 +20,13 @@ from PySide6.QtCore import (
     Qt,
     QThreadPool,
     QTimer,
+    QUrl,
     Signal,
     Slot,
 )
 from PySide6.QtGui import (
     QColor,
+    QDesktopServices,
     QMouseEvent,
     QPainter,
     QPaintEvent,
@@ -705,6 +707,8 @@ class CompressionStatsDialog(QDialog):
         }
 
         def format_param_value(key: str, value: Any) -> str:
+            if value in ("", None):
+                return tr("N/A")
             if key == "quality" and isinstance(value, int | float):
                 return f"{int(value)}%"
             if isinstance(value, bool):
@@ -712,6 +716,8 @@ class CompressionStatsDialog(QDialog):
             return str(value)
 
         def diff_param_value(key: str, val1: Any, val2: Any) -> str:
+            if val1 in ("", None) or val2 in ("", None):
+                return ""
             if isinstance(val1, int | float) and isinstance(val2, int | float):
                 diff = abs(float(val1) - float(val2))
                 if key == "quality":
@@ -725,8 +731,8 @@ class CompressionStatsDialog(QDialog):
 
         def add_global_row(key: str) -> None:
             nonlocal row
-            val1 = settings1.get(key, "")
-            val2 = settings2.get(key, "")
+            val1 = settings1.get(key)
+            val2 = settings2.get(key)
             metric_label = QLabel(tr(param_label_map.get(key, key)))
             val1_label = QLabel(format_param_value(key, val1))
             val2_label = QLabel(format_param_value(key, val2))
@@ -766,8 +772,8 @@ class CompressionStatsDialog(QDialog):
                 _fmt2: str = fmt2,
             ) -> None:
                 nonlocal row
-                val1 = _p1.get(profile_key, "")
-                val2 = _p2.get(profile_key, "")
+                val1 = _p1.get(profile_key)
+                val2 = _p2.get(profile_key)
                 metric_label = QLabel(tr(param_label_map.get(profile_key, profile_key)))
                 val1_label = QLabel(format_param_value(profile_key, val1))
                 val2_label = QLabel(format_param_value(profile_key, val2))
@@ -898,8 +904,8 @@ class CompressionStatsDialog(QDialog):
         keys = sorted(set(stats1.keys()) | set(stats2.keys()))
         for key in keys:
             layout.addWidget(QLabel(tr(label_map.get(key, key))), row, 0)
-            val1 = stats1.get(key, "")
-            val2 = stats2.get(key, "")
+            val1 = stats1.get(key, tr("N/A"))
+            val2 = stats2.get(key, tr("N/A"))
             label1 = QLabel(format_value(key, val1))
             label2 = QLabel(format_value(key, val2))
 
@@ -962,6 +968,8 @@ class MainWindow(QMainWindow):
             ]
             | None
         ) = None
+        self.dir1: Path | None = None
+        self.dir2: Path | None = None
 
         self.setup_ui()
         self.setup_connections()
@@ -1001,6 +1009,14 @@ class MainWindow(QMainWindow):
         self.reset_button = QPushButton(tr("Reset View"))
         self.reset_button.setStyleSheet(BUTTON_STYLE)
 
+        self.open_dir1_button = QPushButton(tr("Open Folder 1"))
+        self.open_dir1_button.setEnabled(False)
+        self.open_dir1_button.setStyleSheet(BUTTON_STYLE)
+
+        self.open_dir2_button = QPushButton(tr("Open Folder 2"))
+        self.open_dir2_button.setEnabled(False)
+        self.open_dir2_button.setStyleSheet(BUTTON_STYLE)
+
         self.stats_button = QPushButton(tr("Compare Stats"))
         self.stats_button.setEnabled(False)
         self.stats_button.setStyleSheet(BUTTON_STYLE)
@@ -1009,6 +1025,8 @@ class MainWindow(QMainWindow):
         controls_layout.addWidget(self.load_button)
         controls_layout.addWidget(self.load_dirs_button)
         controls_layout.addWidget(self.reset_button)
+        controls_layout.addWidget(self.open_dir1_button)
+        controls_layout.addWidget(self.open_dir2_button)
         controls_layout.addWidget(self.stats_button)
         controls_layout.addStretch()
 
@@ -1033,6 +1051,8 @@ class MainWindow(QMainWindow):
         self.load_button.clicked.connect(self.load_image_pair)
         self.load_dirs_button.clicked.connect(self.load_directories)
         self.reset_button.clicked.connect(self.reset_view)
+        self.open_dir1_button.clicked.connect(self.open_dir1)
+        self.open_dir2_button.clicked.connect(self.open_dir2)
         self.stats_button.clicked.connect(self.show_stats)
         self.carousel.thumbnail_clicked.connect(self.load_image_pair_from_thumbnail)
 
@@ -1072,6 +1092,14 @@ class MainWindow(QMainWindow):
 
         self.update_status()
 
+    def open_dir1(self) -> None:
+        if self.dir1:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.dir1)))
+
+    def open_dir2(self) -> None:
+        if self.dir2:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.dir2)))
+
     def clear_pairs(self) -> None:
         """Clear loaded image pairs and thumbnails."""
         self.image_pairs.clear()
@@ -1081,6 +1109,10 @@ class MainWindow(QMainWindow):
         self.viewer.update()
         self.stats_data = None
         self.stats_button.setEnabled(False)
+        self.dir1 = None
+        self.dir2 = None
+        self.open_dir1_button.setEnabled(False)
+        self.open_dir2_button.setEnabled(False)
         self.update_status()
 
     def _preload_thumbnails(self) -> None:
@@ -1141,6 +1173,10 @@ class MainWindow(QMainWindow):
 
     def load_directories_from_paths(self, dir1: Path, dir2: Path) -> None:
         self.clear_pairs()
+        self.dir1 = dir1
+        self.dir2 = dir2
+        self.open_dir1_button.setEnabled(True)
+        self.open_dir2_button.setEnabled(True)
         stats1_file = dir1 / "compression_settings.json"
         stats2_file = dir2 / "compression_settings.json"
         stats1: Path | None = stats1_file if stats1_file.exists() else None
@@ -1168,21 +1204,28 @@ class MainWindow(QMainWindow):
         if self.image_pairs:
             self.load_image_pair_from_thumbnail(self.image_pairs[0])
 
-        if stats1 and stats2:
+        data1: dict[str, Any] = {}
+        data2: dict[str, Any] = {}
+        if stats1:
             try:
-                with stats1.open() as f1, stats2.open() as f2:
+                with stats1.open() as f1:
                     data1 = json.load(f1)
-                    data2 = json.load(f2)
-                self.stats_data = (
-                    data1.get("stats", {}),
-                    data2.get("stats", {}),
-                    data1.get("compression_settings", {}),
-                    data2.get("compression_settings", {}),
-                )
-                self.stats_button.setEnabled(True)
             except Exception:
-                self.stats_data = None
-                self.stats_button.setEnabled(False)
+                data1 = {}
+        if stats2:
+            try:
+                with stats2.open() as f2:
+                    data2 = json.load(f2)
+            except Exception:
+                data2 = {}
+        if data1 or data2:
+            self.stats_data = (
+                data1.get("stats", {}),
+                data2.get("stats", {}),
+                data1.get("compression_settings", {}),
+                data2.get("compression_settings", {}),
+            )
+            self.stats_button.setEnabled(True)
         else:
             self.stats_data = None
             self.stats_button.setEnabled(False)
