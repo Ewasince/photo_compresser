@@ -837,6 +837,11 @@ class CompressionStatsDialog(QDialog):
                 layout.addWidget(diff_label, row, 3)
                 row += 1
 
+        metrics_header = QLabel(tr("Compression Metrics"))
+        metrics_header.setStyleSheet("font-weight: bold; margin-top: 10px")
+        layout.addWidget(metrics_header, row, 0, 1, 4)
+        row += 1
+
         label_map = {
             "input_size_mb": "Input Size",
             "output_size_mb": "Output Size",

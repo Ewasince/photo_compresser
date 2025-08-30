@@ -124,6 +124,7 @@ _translations: dict[str, dict[str, str]] = {
         "Conversion Time": "Время преобразования",
         "Name": "Имя",
         "Compression Settings": "Настройки сжатия",
+        "Compression Metrics": "Метрики сжатия",
         "Max largest side": "Макс. большая сторона",
         "Max smallest side": "Макс. меньшая сторона",
         "Format": "Формат",
