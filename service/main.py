@@ -288,6 +288,21 @@ class MainWindow(QMainWindow):
         output_dir_layout.addWidget(self.select_output_btn)
         input_layout.addLayout(output_dir_layout)
 
+        unsupported_dir_layout = QHBoxLayout()
+        self.unsupported_dir_edit = QLineEdit()
+        self.unsupported_dir_edit.setPlaceholderText(tr("No unsupported directory selected"))
+        self.unsupported_dir_edit.setStyleSheet(
+            "padding: 8px; background-color: white; border: 1px solid #ccc; border-radius: 4px;"
+        )
+        self.unsupported_dir_edit.setVisible(False)
+        self.select_unsupported_btn = QPushButton(tr("Select Unsupported Folder"))
+        self.select_unsupported_btn.setStyleSheet(self.select_output_btn.styleSheet())
+        self.select_unsupported_btn.clicked.connect(self.select_unsupported_directory)
+        self.select_unsupported_btn.setVisible(False)
+        unsupported_dir_layout.addWidget(self.unsupported_dir_edit, 1)
+        unsupported_dir_layout.addWidget(self.select_unsupported_btn)
+        input_layout.addLayout(unsupported_dir_layout)
+
         self.preserve_structure_cb = QCheckBox(tr("Preserve folder structure"))
         self.preserve_structure_cb.setChecked(GLOBAL_DEFAULTS["preserve_structure"])
         input_layout.addWidget(self.preserve_structure_cb)
@@ -301,16 +316,6 @@ class MainWindow(QMainWindow):
         self.copy_unsupported_separate_cb.setChecked(GLOBAL_DEFAULTS["copy_unsupported_to_dir"])
         self.copy_unsupported_separate_cb.stateChanged.connect(self.update_copy_unsupported_state)
         input_layout.addWidget(self.copy_unsupported_separate_cb)
-
-        unsupported_dir_layout = QHBoxLayout()
-        self.unsupported_dir_edit = QLineEdit()
-        self.unsupported_dir_edit.setVisible(False)
-        self.select_unsupported_btn = QPushButton(tr("Select Unsupported Directory"))
-        self.select_unsupported_btn.clicked.connect(self.select_unsupported_directory)
-        self.select_unsupported_btn.setVisible(False)
-        unsupported_dir_layout.addWidget(self.unsupported_dir_edit, 1)
-        unsupported_dir_layout.addWidget(self.select_unsupported_btn)
-        input_layout.addLayout(unsupported_dir_layout)
 
         self.update_copy_unsupported_state()
 
@@ -505,9 +510,11 @@ class MainWindow(QMainWindow):
         button_width = max(
             self.select_input_btn.sizeHint().width(),
             self.select_output_btn.sizeHint().width(),
+            self.select_unsupported_btn.sizeHint().width(),
         )
         self.select_input_btn.setFixedWidth(button_width)
         self.select_output_btn.setFixedWidth(button_width)
+        self.select_unsupported_btn.setFixedWidth(button_width)
 
     def update_translations(self) -> None:
         """Update UI text for the selected language."""
@@ -519,12 +526,14 @@ class MainWindow(QMainWindow):
         self.select_input_btn.setText(tr("Select Input Directory"))
         if self.output_directory is None:
             self.output_dir_edit.setPlaceholderText(tr("No output directory selected"))
+        if not self.unsupported_dir_edit.text():
+            self.unsupported_dir_edit.setPlaceholderText(tr("No unsupported directory selected"))
         self.regen_output_btn.setToolTip(tr("Regenerate output directory name"))
         self.select_output_btn.setText(tr("Select Output Directory"))
         self.preserve_structure_cb.setText(tr("Preserve folder structure"))
         self.copy_unsupported_cb.setText(tr("Copy unsupported files"))
         self.copy_unsupported_separate_cb.setText(tr("Copy unsupported files to separate folder"))
-        self.select_unsupported_btn.setText(tr("Select Unsupported Directory"))
+        self.select_unsupported_btn.setText(tr("Select Unsupported Folder"))
         self.save_profiles_btn.setText(tr("Save Profiles"))
         self.load_profiles_btn.setText(tr("Load Profiles"))
         self.add_profile_btn.setText(tr("Add Profile"))
@@ -586,11 +595,11 @@ class MainWindow(QMainWindow):
     def select_unsupported_directory(self) -> None:
         initial_dir = str(self.output_directory.parent) if self.output_directory else ""
         directory = QFileDialog.getExistingDirectory(
-            self, tr("Select Unsupported Directory"), initial_dir, QFileDialog.Option.ShowDirsOnly
+            self, tr("Select Unsupported Folder"), initial_dir, QFileDialog.Option.ShowDirsOnly
         )
         if directory:
             self.unsupported_dir_edit.setText(directory)
-            self.log_message(tr("Selected unsupported directory: {path}").format(path=directory))
+            self.log_message(tr("Selected unsupported folder: {path}").format(path=directory))
 
     def update_copy_unsupported_state(self) -> None:
         enabled = self.copy_unsupported_cb.isChecked()

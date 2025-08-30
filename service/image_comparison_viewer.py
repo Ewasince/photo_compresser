@@ -701,7 +701,7 @@ class CompressionStatsDialog(QDialog):
             "preserve_structure": "Preserve folder structure",
             "copy_unsupported": "Copy unsupported files",
             "copy_unsupported_to_dir": "Copy unsupported files to separate folder",
-            "unsupported_dir": "Unsupported files directory",
+            "unsupported_dir": "Unsupported files folder",
         }
 
         def format_param_value(key: str, value: Any) -> str:
