@@ -16,6 +16,7 @@ _translations: dict[str, dict[str, str]] = {
         "No output directory selected": "Папка сохранения не выбрана",
         "Regenerate output directory name": "Сгенерировать имя выходной папки",
         "Select Output Directory": "Выбрать папку вывода",
+        "Regenerate unsupported folder name": "Сгенерировать имя папки неподдерживаемых",
         "Save Profiles": "Сохранить профили",
         "Load Profiles": "Загрузить профили",
         "Add Profile": "Добавить профиль",
@@ -31,6 +32,7 @@ _translations: dict[str, dict[str, str]] = {
         "Language:": "Язык:",
         "Warning": "Предупреждение",
         "Please select an input directory first.": "Сначала выберите папку исходных файлов.",
+        "Please select an output directory first.": "Сначала выберите папку вывода.",
         "Output directory already exists. Please regenerate or choose another path.": (
             "Выходная папка уже существует. Сгенерируйте новое имя или выберите другой путь."
         ),
@@ -132,6 +134,7 @@ _translations: dict[str, dict[str, str]] = {
         "Copy unsupported files": "Копировать неподдерживаемые файлы",
         "Copy unsupported files to separate folder": "Копировать неподдерживаемые файлы в отдельную папку",
         "Select Unsupported Folder": "Выбрать папку неподдерживаемых",
+        "Regenerated unsupported folder: {path}": "Сгенерирована папка неподдерживаемых: {path}",
         "Unsupported files folder": "Папка неподдерживаемых файлов",
         "Selected unsupported folder: {path}": "Выбрана папка неподдерживаемых: {path}",
         "No unsupported directory selected": "Папка неподдерживаемых не выбрана",

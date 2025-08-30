@@ -295,11 +295,17 @@ class MainWindow(QMainWindow):
             "padding: 8px; background-color: white; border: 1px solid #ccc; border-radius: 4px;"
         )
         self.unsupported_dir_edit.setVisible(False)
+        self.regen_unsupported_btn = QToolButton()
+        self.regen_unsupported_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
+        self.regen_unsupported_btn.setToolTip(tr("Regenerate unsupported folder name"))
+        self.regen_unsupported_btn.clicked.connect(self.regenerate_unsupported_directory)
+        self.regen_unsupported_btn.setVisible(False)
         self.select_unsupported_btn = QPushButton(tr("Select Unsupported Folder"))
         self.select_unsupported_btn.setStyleSheet(self.select_output_btn.styleSheet())
         self.select_unsupported_btn.clicked.connect(self.select_unsupported_directory)
         self.select_unsupported_btn.setVisible(False)
         unsupported_dir_layout.addWidget(self.unsupported_dir_edit, 1)
+        unsupported_dir_layout.addWidget(self.regen_unsupported_btn)
         unsupported_dir_layout.addWidget(self.select_unsupported_btn)
         input_layout.addLayout(unsupported_dir_layout)
 
@@ -529,6 +535,7 @@ class MainWindow(QMainWindow):
         if not self.unsupported_dir_edit.text():
             self.unsupported_dir_edit.setPlaceholderText(tr("No unsupported directory selected"))
         self.regen_output_btn.setToolTip(tr("Regenerate output directory name"))
+        self.regen_unsupported_btn.setToolTip(tr("Regenerate unsupported folder name"))
         self.select_output_btn.setText(tr("Select Output Directory"))
         self.preserve_structure_cb.setText(tr("Preserve folder structure"))
         self.copy_unsupported_cb.setText(tr("Copy unsupported files"))
@@ -591,6 +598,7 @@ class MainWindow(QMainWindow):
             self.output_dir_edit.setText(str(self.output_directory))
             self.log_message(tr("Selected output directory: {path}").format(path=self.output_directory))
             self.update_copy_unsupported_state()
+            self.update_unsupported_directory()
 
     def select_unsupported_directory(self) -> None:
         initial_dir = str(self.output_directory.parent) if self.output_directory else ""
@@ -607,6 +615,7 @@ class MainWindow(QMainWindow):
         separate = enabled and self.copy_unsupported_separate_cb.isChecked()
         self.unsupported_dir_edit.setVisible(separate)
         self.select_unsupported_btn.setVisible(separate)
+        self.regen_unsupported_btn.setVisible(separate)
         if separate and not self.unsupported_dir_edit.text() and self.output_directory is not None:
             self.unsupported_dir_edit.setText(str(self.generate_unsupported_directory()))
 
@@ -627,6 +636,16 @@ class MainWindow(QMainWindow):
     def update_output_directory_from_text(self, text: str) -> None:
         """Update stored output directory when text changes."""
         self.output_directory = Path(text) if text else None
+        if self.output_directory is not None:
+            self.update_unsupported_directory()
+
+    def update_unsupported_directory(self) -> None:
+        if (
+            self.output_directory is not None
+            and self.copy_unsupported_cb.isChecked()
+            and self.copy_unsupported_separate_cb.isChecked()
+        ):
+            self.unsupported_dir_edit.setText(str(self.generate_unsupported_directory()))
 
     def generate_unsupported_directory(self) -> Path:
         assert self.output_directory is not None
@@ -656,6 +675,14 @@ class MainWindow(QMainWindow):
         self.output_dir_edit.setText(str(self.output_directory))
         self.log_message(tr("Regenerated output directory: {path}").format(path=self.output_directory))
         self.update_copy_unsupported_state()
+        self.update_unsupported_directory()
+
+    def regenerate_unsupported_directory(self) -> None:
+        if self.output_directory is None:
+            QMessageBox.warning(self, tr("Warning"), tr("Please select an output directory first."))
+            return
+        self.unsupported_dir_edit.setText(str(self.generate_unsupported_directory()))
+        self.log_message(tr("Regenerated unsupported folder: {path}").format(path=self.unsupported_dir_edit.text()))
 
     def add_profile_panel(self, profile: CompressionProfile | None = None) -> None:
         allow_conditions = len(self.profile_panels) > 0
