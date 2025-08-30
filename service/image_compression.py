@@ -13,10 +13,10 @@ from pathlib import Path
 from threading import Event, Lock
 from typing import Any, Callable, Sequence
 
-from PIL import Image
+from PIL import ExifTags, Image
 from pillow_heif import register_heif_opener
 
-from service.compression_profiles import CompressionProfile, select_profile
+from service.compression_profiles import CompressionProfile
 from service.constants import SUPPORTED_EXTENSIONS
 from service.file_utils import copy_times_from_src
 from service.save_functions import save_avif, save_jpeg, save_webp
@@ -74,6 +74,9 @@ class ImageCompressor:
 
         # Store profile names used for the last ``process_directory`` run
         self.last_profile_map: dict[Path, str] = {}
+
+        # Store condition evaluations for the last ``process_directory`` run
+        self.last_condition_map: dict[Path, dict[str, dict[str, bool]]] = {}
 
     def apply_profile(self, profile: CompressionProfile) -> None:
         """Apply settings from a compression profile to this compressor."""
@@ -311,6 +314,7 @@ class ImageCompressor:
         compressed_paths: list[Path] = []
         failed_files: list[tuple[Path, str]] = []
         profile_map: dict[Path, str] = {}
+        condition_map: dict[Path, dict[str, dict[str, bool]]] = {}
 
         if progress_callback:
             progress_callback(0, total_files)
@@ -380,11 +384,34 @@ class ImageCompressor:
                 if log_callback:
                     log_callback(msg)
 
-        def _compress_task(src: Path) -> tuple[Path | None, Path, str, str | None]:
+        def _compress_task(
+            src: Path,
+        ) -> tuple[Path | None, Path, str, dict[str, dict[str, bool]], str | None]:
             try:
                 with Image.open(src) as img:
-                    profile = select_profile(img, profiles) if profiles else None
-                    comp = _clone_with_profile(profile)
+                    width, height = img.size
+                    image_format = (img.format or "").upper()
+                    has_transparency = "A" in img.getbands() or "transparency" in img.info
+                    exif = {ExifTags.TAGS.get(k, str(k)): v for k, v in img.getexif().items()}
+                    file_size = src.stat().st_size
+                    evaluations: dict[str, dict[str, bool]] = {}
+                    for p in profiles or []:
+                        results = p.conditions.evaluate(
+                            width,
+                            height,
+                            image_format=image_format,
+                            has_transparency=has_transparency,
+                            file_size=file_size,
+                            exif=exif,
+                        )
+                        evaluations[p.name] = {k: ok for k, (_, ok) in results.items()}
+                    selected_profile: CompressionProfile | None = None
+                    if profiles:
+                        for p in reversed(profiles):
+                            if all(evaluations.get(p.name, {}).values()):
+                                selected_profile = p
+                                break
+                    comp = _clone_with_profile(selected_profile)
                     new_extension = comp._get_extension_according_format()
                     if comp.preserve_structure:
                         rel_path = src.relative_to(input_root)
@@ -401,13 +428,13 @@ class ImageCompressor:
                             used_names.add(output_file)
 
                     saved, error = comp.compress_image(src, output_file, img)
-                    profile_name = profile.name if profile else "Raw"
+                    profile_name = selected_profile.name if selected_profile else "Raw"
                 if saved:
                     copy_times_from_src(src, saved)
-                return saved, src, profile_name, error
+                return saved, src, profile_name, evaluations, error
             except Exception as e:  # Handle errors opening the image
                 logger.exception(f"Error processing {src}: {e}")
-                return None, src, "Raw", str(e)
+                return None, src, "Raw", {}, str(e)
 
         if worker_count > 1:
             with ThreadPoolExecutor(max_workers=worker_count) as executor:
@@ -416,11 +443,12 @@ class ImageCompressor:
                     if stop_event and stop_event.is_set():
                         executor.shutdown(wait=False, cancel_futures=True)
                         break
-                    saved_path, src_file, profile_name, error = future.result()
+                    saved_path, src_file, profile_name, evals, error = future.result()
                     if saved_path:
                         compressed_files += 1
                         compressed_paths.append(saved_path)
                         profile_map[saved_path] = profile_name
+                        condition_map[saved_path] = evals
                         msg = tr("Successfully compressed: {name} with profile {profile}").format(
                             name=src_file.name, profile=profile_name
                         )
@@ -438,11 +466,12 @@ class ImageCompressor:
             for src in tasks:
                 if stop_event and stop_event.is_set():
                     break
-                saved_path, _, profile_name, error = _compress_task(src)
+                saved_path, _, profile_name, evals, error = _compress_task(src)
                 if saved_path:
                     compressed_files += 1
                     compressed_paths.append(saved_path)
                     profile_map[saved_path] = profile_name
+                    condition_map[saved_path] = evals
                     msg = tr("Successfully compressed: {name} with profile {profile}").format(
                         name=src.name, profile=profile_name
                     )
@@ -464,6 +493,7 @@ class ImageCompressor:
         if status_callback:
             status_callback(msg)
         self.last_profile_map = profile_map
+        self.last_condition_map = condition_map
         return total_files, compressed_files, compressed_paths, failed_files
 
     def get_compression_stats(
@@ -587,7 +617,7 @@ def create_image_pairs(compressed_dir: Path, original_dir: Path | None = None) -
 def save_compression_settings(
     output_dir: Path,
     compression_settings: dict[str, Any],
-    image_pairs: list[tuple[Path, Path, str]],
+    image_pairs: list[tuple[Path, Path, str, dict[str, dict[str, bool]]]],
     stats: dict[str, Any],
     failed_files: list[tuple[Path, str]] | None = None,
     conversion_time: str | None = None,
@@ -599,8 +629,9 @@ def save_compression_settings(
     Args:
         output_dir: Directory where to save the settings file
         compression_settings: Dictionary with compression parameters
-        image_pairs: List of tuples ``(original, compressed, profile)``
-            for comparison
+        image_pairs: List of tuples ``(original, compressed, profile, evaluations)``
+            for comparison. ``evaluations`` maps profile names to their
+            condition results as ``{field: bool}``.
         failed_files: List of tuples ``(path, error)`` for images that
             failed to compress
         conversion_time: Human-readable duration of the compression process
@@ -621,8 +652,9 @@ def save_compression_settings(
                 "original_name": original_path.name,
                 "compressed_name": compressed_path.name,
                 "profile": profile,
+                "condition_results": evaluations,
             }
-            for original_path, compressed_path, profile in image_pairs
+            for original_path, compressed_path, profile, evaluations in image_pairs
         ],
         "total_pairs": len(image_pairs),
         "failed_files": [{"path": str(path), "error": error} for path, error in failed_files],

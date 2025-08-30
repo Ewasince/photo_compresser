@@ -16,7 +16,13 @@ def _create_image(dir_path: Path, name: str, color: str) -> Path:
     return path
 
 
-def _write_settings(dir_path: Path, image_path: Path, profiles: list[dict], selected: str) -> None:
+def _write_settings(
+    dir_path: Path,
+    image_path: Path,
+    profiles: list[dict],
+    selected: str,
+    conds: dict[str, dict[str, bool]],
+) -> None:
     data = {
         "profiles": profiles,
         "image_pairs": [
@@ -26,6 +32,7 @@ def _write_settings(dir_path: Path, image_path: Path, profiles: list[dict], sele
                 "profile": selected,
                 "original_name": image_path.name,
                 "compressed_name": image_path.name,
+                "condition_results": conds,
             }
         ],
     }
@@ -42,15 +49,35 @@ def test_profile_tooltip_shows_parameters(tmp_path: Path) -> None:
     img1 = _create_image(dir1, "img.jpg", "red")
     img2 = _create_image(dir2, "img.jpg", "blue")
     profiles1 = [
-        {"name": "P1", "quality": 80, "conditions": {"largest_side": {"op": "<", "value": 20}}},
-        {"name": "P0", "quality": 70, "conditions": {"largest_side": {"op": "<", "value": 5}}},
+        {
+            "name": "P1",
+            "quality": 80,
+            "jpeg_params": {"progressive": True},
+            "conditions": {"largest_side": {"op": "<", "value": 20}},
+        },
+        {
+            "name": "P0",
+            "quality": 70,
+            "conditions": {"largest_side": {"op": "<", "value": 5}},
+        },
     ]
     profiles2 = [
-        {"name": "P2", "quality": 60, "conditions": {"largest_side": {"op": "<", "value": 20}}},
-        {"name": "P_prev", "quality": 50, "conditions": {"largest_side": {"op": "<", "value": 5}}},
+        {
+            "name": "P2",
+            "quality": 60,
+            "jpeg_params": {"progressive": False},
+            "conditions": {"largest_side": {"op": "<", "value": 20}},
+        },
+        {
+            "name": "P_prev",
+            "quality": 50,
+            "conditions": {"largest_side": {"op": "<", "value": 5}},
+        },
     ]
-    _write_settings(dir1, img1, profiles1, "P1")
-    _write_settings(dir2, img2, profiles2, "P2")
+    conds1 = {"P1": {"largest_side": True}, "P0": {"largest_side": False}}
+    conds2 = {"P2": {"largest_side": True}, "P_prev": {"largest_side": False}}
+    _write_settings(dir1, img1, profiles1, "P1", conds1)
+    _write_settings(dir2, img2, profiles2, "P2", conds2)
 
     viewer = MainWindow()
     viewer._preload_thumbnails = lambda: None
@@ -59,12 +86,14 @@ def test_profile_tooltip_shows_parameters(tmp_path: Path) -> None:
     tooltip1 = viewer.profile_label1.toolTip()
     tooltip2 = viewer.profile_label2.toolTip()
     assert "Quality: 80" in tooltip1
+    assert "Progressive: True" in tooltip1
     assert "Largest Side < 20" in tooltip1
     assert "✓" in tooltip1
     assert "Profile: P0" in tooltip1
     assert "Largest Side < 5" in tooltip1
     assert "✗" in tooltip1
     assert "Quality: 60" in tooltip2
+    assert "Progressive" not in tooltip2
     assert "Largest Side < 20" in tooltip2
     assert "✓" in tooltip2
     assert "Profile: P_prev" in tooltip2

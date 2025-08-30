@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from PIL import Image
 from PySide6.QtCore import QSize
@@ -95,6 +95,8 @@ class ImagePair:
     name: str = ""
     profile1: str = "Raw"
     profile2: str = "Raw"
+    conditions1: dict[str, dict[str, bool]] = field(default_factory=dict)
+    conditions2: dict[str, dict[str, bool]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:  # pragma: no cover - simple post-init
         if not self.name:

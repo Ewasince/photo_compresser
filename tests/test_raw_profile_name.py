@@ -19,12 +19,14 @@ def test_raw_profile_saved_untranslated(tmp_path: Path) -> None:
 
     raw_pairs = create_image_pairs(output_dir, input_dir)
     profile_map = compressor.last_profile_map
-    image_pairs = [(orig, comp, profile_map.get(comp, "Raw")) for orig, comp in raw_pairs]
+    condition_map = compressor.last_condition_map
+    image_pairs = [(orig, comp, profile_map.get(comp, "Raw"), condition_map.get(comp, {})) for orig, comp in raw_pairs]
     save_compression_settings(output_dir, {}, image_pairs, {}, profiles=[])
 
     settings_file = output_dir / "compression_settings.json"
     with settings_file.open() as f:
         data = json.load(f)
     assert data["image_pairs"][0]["profile"] == "Raw"
+    assert data["image_pairs"][0]["condition_results"] == {}
     assert tr("Raw") != "Raw"
     set_language("en")

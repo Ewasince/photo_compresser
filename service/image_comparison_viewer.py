@@ -7,11 +7,11 @@ A PySide6 application for comparing pairs of images with interactive features.
 import json
 import logging
 import sys
+from dataclasses import asdict
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from PIL import ExifTags, Image
 from PySide6.QtCore import (
     QMetaObject,
     QObject,
@@ -49,10 +49,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from service.compression_profiles import NumericCondition, ProfileConditions
+from service.compression_profiles import ProfileConditions
 from service.constants import SUPPORTED_EXTENSIONS
 from service.file_utils import format_timedelta
 from service.image_pair import ImagePair
+from service.parameters_defaults import AVIF_DEFAULTS, JPEG_DEFAULTS, WEBP_DEFAULTS
 from service.translator import tr
 
 logger = logging.getLogger(__name__)
@@ -1155,7 +1156,8 @@ class MainWindow(QMainWindow):
                 profile = pair.get("profile", "Raw")
                 if profile == tr("Raw"):
                     profile = "Raw"
-                image_pair = ImagePair(orig, comp, name, "Raw", profile)
+                conds = pair.get("condition_results", {})
+                image_pair = ImagePair(orig, comp, name, "Raw", profile, {}, conds)
                 self.image_pairs.append(image_pair)
                 self.carousel.add_image_pair(image_pair)
         self._preload_thumbnails()
@@ -1182,6 +1184,8 @@ class MainWindow(QMainWindow):
 
         profile_map1: dict[str, str] = {}
         profile_map2: dict[str, str] = {}
+        condition_map1: dict[str, dict[str, dict[str, bool]]] = {}
+        condition_map2: dict[str, dict[str, dict[str, bool]]] = {}
         self.profile_info1 = {}
         self.profile_info2 = {}
         self.profile_list1 = []
@@ -1195,6 +1199,7 @@ class MainWindow(QMainWindow):
                 for pair in data.get("image_pairs", []):
                     comp = pair.get("compressed")
                     profile = pair.get("profile", "Raw")
+                    conds = pair.get("condition_results", {})
                     if profile == tr("Raw"):
                         profile = "Raw"
                     if comp:
@@ -1204,6 +1209,7 @@ class MainWindow(QMainWindow):
                         for i in range(start, len(parts)):
                             suffix = Path(*parts[i:]).as_posix()
                             profile_map1[suffix] = profile
+                            condition_map1[suffix] = conds
             except Exception:
                 profile_map1 = {}
                 self.profile_list1 = []
@@ -1216,6 +1222,7 @@ class MainWindow(QMainWindow):
                 for pair in data.get("image_pairs", []):
                     comp = pair.get("compressed")
                     profile = pair.get("profile", "Raw")
+                    conds = pair.get("condition_results", {})
                     if profile == tr("Raw"):
                         profile = "Raw"
                     if comp:
@@ -1225,6 +1232,7 @@ class MainWindow(QMainWindow):
                         for i in range(start, len(parts)):
                             suffix = Path(*parts[i:]).as_posix()
                             profile_map2[suffix] = profile
+                            condition_map2[suffix] = conds
             except Exception:
                 profile_map2 = {}
                 self.profile_list2 = []
@@ -1246,7 +1254,9 @@ class MainWindow(QMainWindow):
                 profile_key2 = file2.relative_to(dir2).as_posix()
                 profile1 = profile_map1.get(profile_key1, "Raw")
                 profile2 = profile_map2.get(profile_key2, "Raw")
-                image_pair = ImagePair(str(file1), str(file2), pair_name, profile1, profile2)
+                cond1 = condition_map1.get(profile_key1, {})
+                cond2 = condition_map2.get(profile_key2, {})
+                image_pair = ImagePair(str(file1), str(file2), pair_name, profile1, profile2, cond1, cond2)
                 self.image_pairs.append(image_pair)
                 self.carousel.add_image_pair(image_pair)
 
@@ -1318,10 +1328,10 @@ class MainWindow(QMainWindow):
                 self.profile_label2.setText(text2)
                 self.profile_sep.setText("|")
                 self.profile_label1.setToolTip(
-                    self._format_profile_tooltip(self.profile_list1, current_pair.profile1, current_pair.image1_path)
+                    self._format_profile_tooltip(self.profile_list1, current_pair.profile1, current_pair.conditions1)
                 )
                 self.profile_label2.setToolTip(
-                    self._format_profile_tooltip(self.profile_list2, current_pair.profile2, current_pair.image2_path)
+                    self._format_profile_tooltip(self.profile_list2, current_pair.profile2, current_pair.conditions2)
                 )
             else:
                 self.status_label.setText(tr("Loaded {count} image pairs").format(count=len(self.image_pairs)))
@@ -1339,29 +1349,15 @@ class MainWindow(QMainWindow):
             self.profile_label2.setToolTip("")
 
     def _format_profile_tooltip(
-        self, profiles: list[dict[str, Any]], selected_name: str, image_path: str | None
+        self,
+        profiles: list[dict[str, Any]],
+        selected_name: str,
+        evaluations: dict[str, dict[str, bool]],
     ) -> str:
         if not profiles and selected_name == "Raw":
             return tr("Raw")
 
         lines: list[str] = []
-        width = height = 0
-        image_format = ""
-        has_transparency = False
-        file_size: int | None = None
-        exif: dict[str, Any] | None = None
-        if image_path:
-            try:
-                path = Path(image_path)
-                file_size = path.stat().st_size if path.exists() else None
-                with Image.open(path) as img:
-                    width, height = img.size
-                    image_format = (img.format or "").upper()
-                    has_transparency = "A" in img.getbands() or "transparency" in img.info
-                    exif = {ExifTags.TAGS.get(k, str(k)): v for k, v in img.getexif().items()}
-            except Exception:
-                logger.exception("Failed to evaluate profile conditions")
-
         selected = next((p for p in profiles if p.get("name") == selected_name), None)
         if selected:
 
@@ -1375,71 +1371,68 @@ class MainWindow(QMainWindow):
             add("max_largest_side", "Max Largest Side")
             add("max_smallest_side", "Max Smallest Side")
             add("output_format", "Output Format")
-            for fmt in ("jpeg_params", "webp_params", "avif_params"):
-                params = selected.get(fmt)
-                if params:
-                    for key, val in params.items():
+            format_defaults = {
+                "jpeg_params": JPEG_DEFAULTS,
+                "webp_params": WEBP_DEFAULTS,
+                "avif_params": AVIF_DEFAULTS,
+            }
+            for fmt, defaults in format_defaults.items():
+                params = selected.get(fmt) or {}
+                for key, val in params.items():
+                    if defaults.get(key) != val:
                         label = tr(key.replace("_", " ").title())
                         lines.append(f"{label}: {val}")
 
-            if image_path and selected.get("conditions"):
+            selected_eval = evaluations.get(selected_name, {})
+            if selected.get("conditions") and selected_eval:
                 conditions = ProfileConditions.from_dict(selected.get("conditions", {}))
-                evaluations = conditions.evaluate(
-                    width,
-                    height,
-                    image_format=image_format,
-                    has_transparency=has_transparency,
-                    file_size=file_size,
-                    exif=exif,
-                )
-                if evaluations:
-                    lines.append("")
-                    lines.append(tr("Conditions") + ":")
-                    for field, (expected, ok) in evaluations.items():
-                        label = tr(field.replace("_", " ").title())
-                        if isinstance(expected, NumericCondition):
-                            cond_repr = f"{expected.op} {expected.value}"
-                        elif isinstance(expected, list):
-                            cond_repr = ", ".join(str(v) for v in expected)
-                        elif isinstance(expected, dict):
-                            cond_repr = ", ".join(f"{k}={v}" for k, v in expected.items())
-                        else:
-                            cond_repr = str(expected)
-                        symbol = "✓" if ok else "✗"
-                        lines.append(f"{label} {cond_repr}: {symbol}")
+                cond_dict = asdict(conditions)
+                lines.append("")
+                lines.append(tr("Conditions") + ":")
+                for field, ok in selected_eval.items():
+                    expected = cond_dict.get(field)
+                    if expected is None:
+                        continue
+                    if isinstance(expected, dict) and "op" in expected and "value" in expected:
+                        cond_repr = f"{expected['op']} {expected['value']}"
+                    elif isinstance(expected, list):
+                        cond_repr = ", ".join(str(v) for v in expected)
+                    elif isinstance(expected, dict):
+                        cond_repr = ", ".join(f"{k}={v}" for k, v in expected.items())
+                    else:
+                        cond_repr = str(expected)
+                    symbol = "✓" if ok else "✗"
+                    label = tr(field.replace("_", " ").title())
+                    lines.append(f"{label} {cond_repr}: {symbol}")
         else:
             lines.append(tr("Raw"))
 
-        if image_path:
-            for profile in reversed(profiles):
-                name = profile.get("name", "")
-                if name == selected_name:
-                    break
+        for profile in reversed(profiles):
+            name = profile.get("name", "")
+            if name == selected_name:
+                break
+            evals = evaluations.get(name, {})
+            lines.append("")
+            lines.append(tr("Profile: {profile}").format(profile=name))
+            if evals:
+                lines.append(tr("Conditions") + ":")
                 conditions = ProfileConditions.from_dict(profile.get("conditions", {}))
-                evaluations = conditions.evaluate(
-                    width,
-                    height,
-                    image_format=image_format,
-                    has_transparency=has_transparency,
-                    file_size=file_size,
-                    exif=exif,
-                )
-                lines.append("")
-                lines.append(tr("Profile: {profile}").format(profile=name))
-                if evaluations:
-                    lines.append(tr("Conditions") + ":")
-                    for field, (expected, ok) in evaluations.items():
-                        label = tr(field.replace("_", " ").title())
-                        if isinstance(expected, NumericCondition):
-                            cond_repr = f"{expected.op} {expected.value}"
-                        elif isinstance(expected, list):
-                            cond_repr = ", ".join(str(v) for v in expected)
-                        elif isinstance(expected, dict):
-                            cond_repr = ", ".join(f"{k}={v}" for k, v in expected.items())
-                        else:
-                            cond_repr = str(expected)
-                        symbol = "✓" if ok else "✗"
-                        lines.append(f"{label} {cond_repr}: {symbol}")
+                cond_dict = asdict(conditions)
+                for field, ok in evals.items():
+                    expected = cond_dict.get(field)
+                    if expected is None:
+                        continue
+                    if isinstance(expected, dict) and "op" in expected and "value" in expected:
+                        cond_repr = f"{expected['op']} {expected['value']}"
+                    elif isinstance(expected, list):
+                        cond_repr = ", ".join(str(v) for v in expected)
+                    elif isinstance(expected, dict):
+                        cond_repr = ", ".join(f"{k}={v}" for k, v in expected.items())
+                    else:
+                        cond_repr = str(expected)
+                    symbol = "✓" if ok else "✗"
+                    label = tr(field.replace("_", " ").title())
+                    lines.append(f"{label} {cond_repr}: {symbol}")
 
         return "\n".join(lines)
 
