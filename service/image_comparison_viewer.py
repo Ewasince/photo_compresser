@@ -5,11 +5,13 @@ A PySide6 application for comparing pairs of images with interactive features.
 """
 
 import json
+import logging
 import sys
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+from PIL import ExifTags, Image
 from PySide6.QtCore import (
     QMetaObject,
     QObject,
@@ -47,10 +49,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from service.compression_profiles import NumericCondition, ProfileConditions
 from service.constants import SUPPORTED_EXTENSIONS
 from service.file_utils import format_timedelta
 from service.image_pair import ImagePair
 from service.translator import tr
+
+logger = logging.getLogger(__name__)
 
 BUTTON_STYLE = """
     QPushButton {
@@ -1215,9 +1220,10 @@ class MainWindow(QMainWindow):
                         break
             if file2.exists():
                 pair_name = rel.as_posix()
-                profile_key = pair_name
-                profile1 = profile_map1.get(profile_key, "Raw")
-                profile2 = profile_map2.get(profile_key, "Raw")
+                profile_key1 = file1.relative_to(dir1).as_posix()
+                profile_key2 = file2.relative_to(dir2).as_posix()
+                profile1 = profile_map1.get(profile_key1, "Raw")
+                profile2 = profile_map2.get(profile_key2, "Raw")
                 image_pair = ImagePair(str(file1), str(file2), pair_name, profile1, profile2)
                 self.image_pairs.append(image_pair)
                 self.carousel.add_image_pair(image_pair)
@@ -1290,8 +1296,8 @@ class MainWindow(QMainWindow):
                 self.profile_label2.setText(text2)
                 info1 = self.profile_info1.get(current_pair.profile1)
                 info2 = self.profile_info2.get(current_pair.profile2)
-                self.profile_label1.setToolTip(self._format_profile_tooltip(info1))
-                self.profile_label2.setToolTip(self._format_profile_tooltip(info2))
+                self.profile_label1.setToolTip(self._format_profile_tooltip(info1, current_pair.image1_path))
+                self.profile_label2.setToolTip(self._format_profile_tooltip(info2, current_pair.image2_path))
             else:
                 self.status_label.setText(tr("Loaded {count} image pairs").format(count=len(self.image_pairs)))
                 self.profile_label1.clear()
@@ -1301,7 +1307,7 @@ class MainWindow(QMainWindow):
             self.profile_label1.clear()
             self.profile_label2.clear()
 
-    def _format_profile_tooltip(self, profile: dict[str, Any] | None) -> str:
+    def _format_profile_tooltip(self, profile: dict[str, Any] | None, image_path: str | None) -> str:
         if not profile:
             return tr("Raw")
         lines: list[str] = []
@@ -1322,6 +1328,43 @@ class MainWindow(QMainWindow):
                 for key, val in params.items():
                     label = tr(key.replace("_", " ").title())
                     lines.append(f"{label}: {val}")
+
+        if image_path and profile.get("conditions"):
+            try:
+                path = Path(image_path)
+                file_size = path.stat().st_size if path.exists() else None
+                with Image.open(path) as img:
+                    width, height = img.size
+                    image_format = (img.format or "").upper()
+                    has_transparency = "A" in img.getbands() or "transparency" in img.info
+                    exif = {ExifTags.TAGS.get(k, str(k)): v for k, v in img.getexif().items()}
+                conditions = ProfileConditions.from_dict(profile.get("conditions", {}))
+                evaluations = conditions.evaluate(
+                    width,
+                    height,
+                    image_format=image_format,
+                    has_transparency=has_transparency,
+                    file_size=file_size,
+                    exif=exif,
+                )
+                if evaluations:
+                    lines.append("")
+                    lines.append(tr("Conditions") + ":")
+                    for field, (expected, ok) in evaluations.items():
+                        label = tr(field.replace("_", " ").title())
+                        if isinstance(expected, NumericCondition):
+                            cond_repr = f"{expected.op} {expected.value}"
+                        elif isinstance(expected, list):
+                            cond_repr = ", ".join(str(v) for v in expected)
+                        elif isinstance(expected, dict):
+                            cond_repr = ", ".join(f"{k}={v}" for k, v in expected.items())
+                        else:
+                            cond_repr = str(expected)
+                        symbol = "✓" if ok else "✗"
+                        lines.append(f"{label} {cond_repr}: {symbol}")
+            except Exception:
+                logger.exception("Failed to evaluate profile conditions")
+
         return "\n".join(lines)
 
 

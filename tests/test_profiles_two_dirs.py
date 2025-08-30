@@ -39,7 +39,7 @@ def test_profiles_loaded_for_two_directories(tmp_path: Path) -> None:
     dir1.mkdir()
     dir2.mkdir()
     img1 = _create_image(dir1, "img.jpg", "red")
-    img2 = _create_image(dir2, "img.jpg", "blue")
+    img2 = _create_image(dir2, "img.png", "blue")
     _write_settings(dir1, img1, "P1")
     _write_settings(dir2, img2, "P2")
 
