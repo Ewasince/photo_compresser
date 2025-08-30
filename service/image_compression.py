@@ -9,7 +9,7 @@ import os
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from threading import Event
+from threading import Event, Lock
 from typing import Any, Callable, Sequence
 
 from PIL import Image
@@ -90,62 +90,74 @@ class ImageCompressor:
         """Set AVIF-specific compression parameters."""
         self.avif_params = kwargs
 
-    def compress_image(self, input_path: Path, output_path: Path) -> Path | None:
-        """
-        Compress a single image according to the specified parameters.
+    def compress_image(
+        self,
+        input_path: Path,
+        output_path: Path,
+        img: Image.Image | None = None,
+    ) -> Path | None:
+        """Compress a single image and save it to ``output_path``.
 
         Args:
             input_path: Path to the input image
             output_path: Path where the compressed image should be saved
+            img: Optional already opened :class:`~PIL.Image.Image`.
+                If provided, the image won't be reopened, avoiding duplicate
+                disk reads.
 
         Returns:
-            Path to saved image if successful, otherwise None
+            Path to saved image if successful, otherwise ``None``
         """
         try:
-            with Image.open(input_path) as img:
-                # Calculate new dimensions
-                width, height = img.size
-                largest_side = max(width, height)
-                smallest_side = min(width, height)
-
-                # Determine if resizing is needed
-                new_width, new_height = width, height
-
-                if self.max_largest_side is not None and largest_side > self.max_largest_side:
-                    # Scale down proportionally
-                    scale_factor = self.max_largest_side / largest_side
-                    new_width = int(width * scale_factor)
-                    new_height = int(height * scale_factor)
-
-                if self.max_smallest_side is not None and smallest_side > self.max_smallest_side:
-                    # Check if we need to scale down further
-                    current_smallest = min(new_width, new_height)
-                    if current_smallest > self.max_smallest_side:
-                        scale_factor = self.max_smallest_side / current_smallest
-                        new_width = int(new_width * scale_factor)
-                        new_height = int(new_height * scale_factor)
-
-                # Resize image if needed
-                if new_width != width or new_height != height:
-                    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                    logger.info(f"Resized {input_path.name} from {width}x{height} to {new_width}x{new_height}")
-
-                # Ensure output directory exists
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-
-                # Use custom save functions if available
-                if self.output_format == "JPEG":
-                    return self._save_jpeg_custom(img, input_path, output_path)
-                if self.output_format == "WEBP":
-                    return self._save_webp_custom(img, input_path, output_path)
-                if self.output_format == "AVIF":
-                    return self._save_avif_custom(img, input_path, output_path)
-                # Fallback to basic Pillow saving
-                return self._save_basic(img, output_path)
-
+            if img is None:
+                with Image.open(input_path) as opened:
+                    return self._compress_open_image(opened, input_path, output_path)
+            return self._compress_open_image(img, input_path, output_path)
         except Exception as e:
             logger.exception(f"Error compressing {input_path}: {e}")
             return None
+
+    def _compress_open_image(self, img: Image.Image, input_path: Path, output_path: Path) -> Path | None:
+        """Core implementation for :meth:`compress_image` working on an open image."""
+        # Calculate new dimensions
+        width, height = img.size
+        largest_side = max(width, height)
+        smallest_side = min(width, height)
+
+        # Determine if resizing is needed
+        new_width, new_height = width, height
+
+        if self.max_largest_side is not None and largest_side > self.max_largest_side:
+            # Scale down proportionally
+            scale_factor = self.max_largest_side / largest_side
+            new_width = int(width * scale_factor)
+            new_height = int(height * scale_factor)
+
+        if self.max_smallest_side is not None and smallest_side > self.max_smallest_side:
+            # Check if we need to scale down further
+            current_smallest = min(new_width, new_height)
+            if current_smallest > self.max_smallest_side:
+                scale_factor = self.max_smallest_side / current_smallest
+                new_width = int(new_width * scale_factor)
+                new_height = int(new_height * scale_factor)
+
+        # Resize image if needed
+        if new_width != width or new_height != height:
+            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            logger.info(f"Resized {input_path.name} from {width}x{height} to {new_width}x{new_height}")
+
+        # Ensure output directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Use custom save functions if available
+        if self.output_format == "JPEG":
+            return self._save_jpeg_custom(img, input_path, output_path)
+        if self.output_format == "WEBP":
+            return self._save_webp_custom(img, input_path, output_path)
+        if self.output_format == "AVIF":
+            return self._save_avif_custom(img, input_path, output_path)
+        # Fallback to basic Pillow saving
+        return self._save_basic(img, output_path)
 
     def _save_jpeg_custom(self, img: Image.Image, input_path: Path, output_path: Path) -> Path | None:
         """Save image using custom JPEG save function."""
@@ -298,7 +310,7 @@ class ImageCompressor:
 
         worker_count = max(1, num_workers or self.num_workers)
 
-        tasks: list[tuple[ImageCompressor, Path, Path]] = []
+        tasks: list[Path] = []
         used_names: set[Path] = set()
 
         def _clone_with_profile(profile: CompressionProfile | None) -> "ImageCompressor":
@@ -317,6 +329,8 @@ class ImageCompressor:
                 clone.apply_profile(profile)
             return clone
 
+        used_names_lock = Lock()
+
         # Prepare tasks and copy non-image files
         for file_path in input_root.rglob("*"):
             if stop_event and stop_event.is_set():
@@ -325,24 +339,7 @@ class ImageCompressor:
                 continue
 
             if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
-                profile = select_profile(file_path, profiles) if profiles else None
-                compressor = _clone_with_profile(profile)
-
-                if compressor.preserve_structure:
-                    base_name = file_path.stem
-                    new_extension = compressor._get_extension_according_format()
-                    output_file = output_root / f"{base_name}{new_extension}"
-                else:
-                    base_name = file_path.stem
-                    new_extension = compressor._get_extension_according_format()
-                    counter = 1
-                    output_file = output_root / f"{base_name}{new_extension}"
-                    while output_file in used_names or output_file.exists():
-                        output_file = output_root / f"{base_name}_{counter}{new_extension}"
-                        counter += 1
-
-                used_names.add(output_file)
-                tasks.append((compressor, file_path, output_file))
+                tasks.append(file_path)
             else:
                 if self.copy_unsupported:
                     if self.preserve_structure:
@@ -365,15 +362,33 @@ class ImageCompressor:
 
                 logger.info(msg)
 
-        def _compress_task(comp: "ImageCompressor", src: Path, dst: Path) -> tuple[Path | None, Path]:
-            saved = comp.compress_image(src, dst)
+        def _compress_task(src: Path) -> tuple[Path | None, Path]:
+            with Image.open(src) as img:
+                profile = select_profile(img, profiles) if profiles else None
+                comp = _clone_with_profile(profile)
+                new_extension = comp._get_extension_according_format()
+                if comp.preserve_structure:
+                    rel_path = src.relative_to(input_root)
+                    output_file = output_root / rel_path
+                    output_file = output_file.with_suffix(new_extension)
+                else:
+                    base_name = src.stem
+                    counter = 1
+                    with used_names_lock:
+                        output_file = output_root / f"{base_name}{new_extension}"
+                        while output_file in used_names or output_file.exists():
+                            output_file = output_root / f"{base_name}_{counter}{new_extension}"
+                            counter += 1
+                        used_names.add(output_file)
+
+                saved = comp.compress_image(src, output_file, img)
             if saved:
                 copy_times_from_src(src, saved)
             return saved, src
 
         if worker_count > 1:
             with ThreadPoolExecutor(max_workers=worker_count) as executor:
-                future_to_file = [executor.submit(_compress_task, c, s, d) for c, s, d in tasks]
+                future_to_file = [executor.submit(_compress_task, s) for s in tasks]
                 for future in as_completed(future_to_file):
                     if stop_event and stop_event.is_set():
                         executor.shutdown(wait=False, cancel_futures=True)
@@ -392,12 +407,11 @@ class ImageCompressor:
                     if progress_callback:
                         progress_callback(processed_files, total_files)
         else:
-            for comp, src, dst in tasks:
+            for src in tasks:
                 if stop_event and stop_event.is_set():
                     break
-                saved_path = comp.compress_image(src, dst)
+                saved_path, _ = _compress_task(src)
                 if saved_path:
-                    copy_times_from_src(src, saved_path)
                     compressed_files += 1
                     compressed_paths.append(saved_path)
                     msg = tr("Successfully compressed: {name}").format(name=src.name)
