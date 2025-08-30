@@ -44,6 +44,7 @@ _translations: dict[str, dict[str, str]] = {
         "Compression error: {error}": "Ошибка сжатия: {error}",
         "Compression Complete": "Сжатие завершено",
         "Compression completed successfully!": "Сжатие успешно завершено!",
+        "Open Output Folder": "Открыть папку вывода",
         "Compression failed": "Сжатие не удалось",
         "Compression Error": "Ошибка сжатия",
         "An error occurred during compression:\n\n{error}": "Произошла ошибка во время сжатия:\n\n{error}",

@@ -10,8 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from threading import Event
 
-from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QFont, QIcon
+from PySide6.QtCore import Qt, QThread, QUrl, Signal
+from PySide6.QtGui import QDesktopServices, QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -852,7 +852,15 @@ Output directory: {self.output_directory}
             """
 
             self.log_message(tr("Compression completed successfully!"))
-            QMessageBox.information(self, tr("Compression Complete"), message)
+            msg = QMessageBox(self)
+            msg.setWindowTitle(tr("Compression Complete"))
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.setText(message)
+            open_btn = msg.addButton(tr("Open Output Folder"), QMessageBox.ButtonRole.AcceptRole)
+            msg.addButton(QMessageBox.StandardButton.Ok)
+            msg.exec()
+            if msg.clickedButton() is open_btn and self.output_directory:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.output_directory)))
             self.status_label.setText(tr("Compression completed successfully!"))
 
         self.compression_worker = None
