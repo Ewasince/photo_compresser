@@ -20,11 +20,13 @@ from PySide6.QtCore import (
     Qt,
     QThreadPool,
     QTimer,
+    QUrl,
     Signal,
     Slot,
 )
 from PySide6.QtGui import (
     QColor,
+    QDesktopServices,
     QMouseEvent,
     QPainter,
     QPaintEvent,
@@ -667,16 +669,23 @@ class CompressionStatsDialog(QDialog):
         stats2: dict[str, Any],
         settings1: dict[str, Any],
         settings2: dict[str, Any],
+        dir1: Path | None,
+        dir2: Path | None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Compression Statistics"))
         layout = QGridLayout(self)
 
-        layout.addWidget(QLabel(tr("Metric")), 0, 0)
-        layout.addWidget(QLabel(tr("Directory 1")), 0, 1)
-        layout.addWidget(QLabel(tr("Directory 2")), 0, 2)
-        layout.addWidget(QLabel(tr("Difference")), 0, 3)
+        layout.addWidget(QLabel(tr("Path to folder 1:")), 0, 0)
+        layout.addWidget(QLabel(str(dir1) if dir1 is not None else tr("N/A")), 0, 1, 1, 3)
+        layout.addWidget(QLabel(tr("Path to folder 2:")), 1, 0)
+        layout.addWidget(QLabel(str(dir2) if dir2 is not None else tr("N/A")), 1, 1, 1, 3)
+
+        layout.addWidget(QLabel(tr("Metric")), 2, 0)
+        layout.addWidget(QLabel(tr("Directory 1")), 2, 1)
+        layout.addWidget(QLabel(tr("Directory 2")), 2, 2)
+        layout.addWidget(QLabel(tr("Difference")), 2, 3)
 
         param_label_map = {
             "output_format": "Output Format",
@@ -705,6 +714,8 @@ class CompressionStatsDialog(QDialog):
         }
 
         def format_param_value(key: str, value: Any) -> str:
+            if value in ("", None):
+                return tr("N/A")
             if key == "quality" and isinstance(value, int | float):
                 return f"{int(value)}%"
             if isinstance(value, bool):
@@ -712,6 +723,8 @@ class CompressionStatsDialog(QDialog):
             return str(value)
 
         def diff_param_value(key: str, val1: Any, val2: Any) -> str:
+            if val1 in ("", None) or val2 in ("", None):
+                return ""
             if isinstance(val1, int | float) and isinstance(val2, int | float):
                 diff = abs(float(val1) - float(val2))
                 if key == "quality":
@@ -721,12 +734,12 @@ class CompressionStatsDialog(QDialog):
                 return tr("Different")
             return ""
 
-        row = 1
+        row = 3
 
         def add_global_row(key: str) -> None:
             nonlocal row
-            val1 = settings1.get(key, "")
-            val2 = settings2.get(key, "")
+            val1 = settings1.get(key)
+            val2 = settings2.get(key)
             metric_label = QLabel(tr(param_label_map.get(key, key)))
             val1_label = QLabel(format_param_value(key, val1))
             val2_label = QLabel(format_param_value(key, val2))
@@ -766,8 +779,8 @@ class CompressionStatsDialog(QDialog):
                 _fmt2: str = fmt2,
             ) -> None:
                 nonlocal row
-                val1 = _p1.get(profile_key, "")
-                val2 = _p2.get(profile_key, "")
+                val1 = _p1.get(profile_key)
+                val2 = _p2.get(profile_key)
                 metric_label = QLabel(tr(param_label_map.get(profile_key, profile_key)))
                 val1_label = QLabel(format_param_value(profile_key, val1))
                 val2_label = QLabel(format_param_value(profile_key, val2))
@@ -783,25 +796,30 @@ class CompressionStatsDialog(QDialog):
 
             add_param_row("output_format")
             add_param_row("quality")
+            format_specific = {
+                "jpeg": ["progressive", "subsampling", "optimize", "smooth", "keep_rgb"],
+                "webp": ["lossless", "method", "alpha_quality", "exact"],
+                "avif": [
+                    "subsampling",
+                    "speed",
+                    "codec",
+                    "range",
+                    "qmin",
+                    "qmax",
+                    "autotiling",
+                    "tile_rows",
+                    "tile_cols",
+                ],
+            }
 
-            if fmt1 == fmt2:
-                format_specific = {
-                    "jpeg": ["progressive", "subsampling", "optimize", "smooth", "keep_rgb"],
-                    "webp": ["lossless", "method", "alpha_quality", "exact"],
-                    "avif": [
-                        "subsampling",
-                        "speed",
-                        "codec",
-                        "range",
-                        "qmin",
-                        "qmax",
-                        "autotiling",
-                        "tile_rows",
-                        "tile_cols",
-                    ],
-                }
-                for key in format_specific.get(fmt1, []):
-                    add_param_row(key)
+            format_keys: list[str] = []
+            for fmt in (fmt1, fmt2):
+                for key in format_specific.get(fmt, []):
+                    if key not in format_keys:
+                        format_keys.append(key)
+
+            for key in format_keys:
+                add_param_row(key)
 
             cond_label_map = {
                 "smallest_side": "Smallest side",
@@ -898,8 +916,8 @@ class CompressionStatsDialog(QDialog):
         keys = sorted(set(stats1.keys()) | set(stats2.keys()))
         for key in keys:
             layout.addWidget(QLabel(tr(label_map.get(key, key))), row, 0)
-            val1 = stats1.get(key, "")
-            val2 = stats2.get(key, "")
+            val1 = stats1.get(key, tr("N/A"))
+            val2 = stats2.get(key, tr("N/A"))
             label1 = QLabel(format_value(key, val1))
             label2 = QLabel(format_value(key, val2))
 
@@ -945,6 +963,21 @@ class CompressionStatsDialog(QDialog):
                 elif v2 < v1:
                     label2.setStyleSheet("background-color: #228B22; color: white;")
 
+        buttons_layout = QHBoxLayout()
+        open1 = QPushButton(tr("Open Folder 1"))
+        open2 = QPushButton(tr("Open Folder 2"))
+        open1.setStyleSheet(BUTTON_STYLE)
+        open2.setStyleSheet(BUTTON_STYLE)
+        open1.setEnabled(dir1 is not None)
+        open2.setEnabled(dir2 is not None)
+        if dir1 is not None:
+            open1.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(dir1))))
+        if dir2 is not None:
+            open2.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(dir2))))
+        buttons_layout.addWidget(open1)
+        buttons_layout.addWidget(open2)
+        layout.addLayout(buttons_layout, row, 0, 1, 4)
+
 
 class MainWindow(QMainWindow):
     """Main application window."""
@@ -962,6 +995,8 @@ class MainWindow(QMainWindow):
             ]
             | None
         ) = None
+        self.dir1: Path | None = None
+        self.dir2: Path | None = None
 
         self.setup_ui()
         self.setup_connections()
@@ -1081,6 +1116,8 @@ class MainWindow(QMainWindow):
         self.viewer.update()
         self.stats_data = None
         self.stats_button.setEnabled(False)
+        self.dir1 = None
+        self.dir2 = None
         self.update_status()
 
     def _preload_thumbnails(self) -> None:
@@ -1141,6 +1178,8 @@ class MainWindow(QMainWindow):
 
     def load_directories_from_paths(self, dir1: Path, dir2: Path) -> None:
         self.clear_pairs()
+        self.dir1 = dir1
+        self.dir2 = dir2
         stats1_file = dir1 / "compression_settings.json"
         stats2_file = dir2 / "compression_settings.json"
         stats1: Path | None = stats1_file if stats1_file.exists() else None
@@ -1168,21 +1207,28 @@ class MainWindow(QMainWindow):
         if self.image_pairs:
             self.load_image_pair_from_thumbnail(self.image_pairs[0])
 
-        if stats1 and stats2:
+        data1: dict[str, Any] = {}
+        data2: dict[str, Any] = {}
+        if stats1:
             try:
-                with stats1.open() as f1, stats2.open() as f2:
+                with stats1.open() as f1:
                     data1 = json.load(f1)
-                    data2 = json.load(f2)
-                self.stats_data = (
-                    data1.get("stats", {}),
-                    data2.get("stats", {}),
-                    data1.get("compression_settings", {}),
-                    data2.get("compression_settings", {}),
-                )
-                self.stats_button.setEnabled(True)
             except Exception:
-                self.stats_data = None
-                self.stats_button.setEnabled(False)
+                data1 = {}
+        if stats2:
+            try:
+                with stats2.open() as f2:
+                    data2 = json.load(f2)
+            except Exception:
+                data2 = {}
+        if data1 or data2:
+            self.stats_data = (
+                data1.get("stats", {}),
+                data2.get("stats", {}),
+                data1.get("compression_settings", {}),
+                data2.get("compression_settings", {}),
+            )
+            self.stats_button.setEnabled(True)
         else:
             self.stats_data = None
             self.stats_button.setEnabled(False)
@@ -1198,6 +1244,8 @@ class MainWindow(QMainWindow):
             self.stats_data[1],
             self.stats_data[2],
             self.stats_data[3],
+            self.dir1,
+            self.dir2,
             self,
         )
         dialog.exec()
