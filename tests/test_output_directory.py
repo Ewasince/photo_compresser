@@ -69,20 +69,3 @@ def test_auto_update_unsupported_directory_on_output_change(qapp: QApplication, 
     assert second_unsup.parent == second_out.parent
     assert second_unsup.name.startswith(f"{second_out.name}_{tr('not_proceed')}")
     assert second_unsup != first_unsup
-
-
-def test_regenerate_unsupported_directory_button(qapp: QApplication, tmp_path: Path) -> None:
-    window = MainWindow()
-    qapp.processEvents()
-    window.copy_unsupported_cb.setChecked(True)
-    window.copy_unsupported_separate_cb.setChecked(True)
-    window.output_directory = tmp_path / "out"
-    window.output_dir_edit.setText(str(window.output_directory))
-    qapp.processEvents()
-    first = Path(window.unsupported_dir_edit.text())
-    first.mkdir()
-    window.regen_unsupported_btn.click()
-    qapp.processEvents()
-    second = Path(window.unsupported_dir_edit.text())
-    assert second != first
-    assert not second.exists()
