@@ -43,7 +43,6 @@ from service.file_utils import format_timedelta
 # Import our modules
 from service.image_compression import (
     ImageCompressor,
-    create_image_pairs,
     save_compression_settings,
 )
 from service.parameters_defaults import GLOBAL_DEFAULTS
@@ -84,7 +83,13 @@ class CompressionWorker(QThread):
             start_time = datetime.now()
 
             # Process the directory
-            total_files, compressed_files, compressed_paths, failed_files = self.compressor.process_directory(
+            (
+                total_files,
+                compressed_files,
+                compressed_paths,
+                failed_files,
+                profile_results,
+            ) = self.compressor.process_directory(
                 self.input_dir,
                 self.output_dir,
                 self.profiles,
@@ -110,9 +115,8 @@ class CompressionWorker(QThread):
             elapsed = datetime.now() - start_time
             stats["conversion_time"] = format_timedelta(elapsed)
 
-            # Create image pairs for settings file
-            self.status_updated.emit(tr("Generating image pairs..."))
-            image_pairs = create_image_pairs(self.output_dir, self.input_dir)
+            # Prepare data for settings file
+            image_pairs = profile_results
             self.status_updated.emit(tr("Saving compression settings..."))
 
             # Save compression settings
@@ -760,9 +764,7 @@ class MainWindow(QMainWindow):
             unsupported_dir=unsupported_dir,
             output_format=default_profile.output_format,
         )
-        compressor.set_jpeg_parameters(**default_profile.jpeg_params)
-        compressor.set_webp_parameters(**default_profile.webp_params)
-        compressor.set_avif_parameters(**default_profile.avif_params)
+        compressor.apply_profile(default_profile)
 
         compression_settings = {
             "input_directory": str(self.input_directory),

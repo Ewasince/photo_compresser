@@ -16,7 +16,7 @@ def test_process_directory_parallel(tmp_path: Path) -> None:
         Image.new("RGB", (10, 10)).save(input_dir / f"img{i}.jpg")
     output_dir = tmp_path / "out"
     compressor = ImageCompressor()
-    total, compressed, _, failed = compressor.process_directory(input_dir, output_dir, num_workers=2)
+    total, compressed, _, failed, _ = compressor.process_directory(input_dir, output_dir, num_workers=2)
     assert total == 3
     assert compressed == 3
     assert failed == []

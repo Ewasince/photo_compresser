@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -50,6 +51,11 @@ from PySide6.QtWidgets import (
 from service.constants import SUPPORTED_EXTENSIONS
 from service.file_utils import format_timedelta
 from service.image_pair import ImagePair
+from service.parameters_defaults import (
+    AVIF_DEFAULTS,
+    JPEG_DEFAULTS,
+    WEBP_DEFAULTS,
+)
 from service.translator import tr
 
 BUTTON_STYLE = """
@@ -150,6 +156,8 @@ class ComparisonViewer(QWidget):
 
         # Image data
         self.image_pair: ImagePair | None = None
+        self.profiles1: dict[str, dict[str, Any]] = {}
+        self.profiles2: dict[str, dict[str, Any]] = {}
         self.zoom_factor = 1.0
         self.pan_offset = QPoint(0, 0)
         self.slider_position = 0.5  # 0.0 = left, 1.0 = right
@@ -171,6 +179,8 @@ class ComparisonViewer(QWidget):
                 color: white;
             }
         """)
+        self.left_profile_rect = QRect()
+        self.right_profile_rect = QRect()
 
     def set_image_pair(self, image_pair: ImagePair) -> None:
         """Set the image pair to display."""
@@ -396,6 +406,24 @@ class ComparisonViewer(QWidget):
         else:
             self.setCursor(Qt.CursorShape.ArrowCursor)
 
+        tooltip_text = ""
+        if self.left_profile_rect.contains(event.pos()):
+            tooltip_text = self._build_profile_tooltip(
+                self.image_pair.profile1,
+                self.image_pair.conditions1,
+                self.profiles1,
+            )
+        elif self.right_profile_rect.contains(event.pos()):
+            tooltip_text = self._build_profile_tooltip(
+                self.image_pair.profile2,
+                self.image_pair.conditions2,
+                self.profiles2,
+            )
+        if tooltip_text:
+            QToolTip.showText(event.globalPos(), tooltip_text, self)
+        else:
+            QToolTip.hideText()
+
     def wheelEvent(self, event: QWheelEvent | None) -> None:
         """Handle mouse wheel events for zooming and scrolling."""
         if not self.image_pair or event is None:
@@ -471,13 +499,50 @@ class ComparisonViewer(QWidget):
         font_metrics = painter.fontMetrics()
         text_height = font_metrics.height()
 
+        # Profile labels
+        profile1 = self.image_pair.profile1 if self.image_pair.profile1 != "Raw" else tr("Original photo")
+        profile2 = self.image_pair.profile2 if self.image_pair.profile2 != "Raw" else tr("Original photo")
+        left_profile_text = tr("Profile: {name}").format(name=profile1)
+        right_profile_text = tr("Profile: {name}").format(name=profile2)
+        left_profile_width = font_metrics.horizontalAdvance(left_profile_text)
+        right_profile_width = font_metrics.horizontalAdvance(right_profile_text)
+
+        profile_rect_height = text_height + 2 * padding
+        left_profile_rect = QRect(
+            img1_x + 10,
+            img1_y + scaled_height1 - 2 * profile_rect_height - 10,
+            left_profile_width + 2 * padding,
+            profile_rect_height,
+        )
+        right_profile_rect = QRect(
+            img2_x + scaled_width2 - right_profile_width - 2 * padding - 10,
+            img2_y + scaled_height2 - 2 * profile_rect_height - 10,
+            right_profile_width + 2 * padding,
+            profile_rect_height,
+        )
+        painter.fillRect(left_profile_rect, QColor(0, 0, 0, 180))
+        painter.fillRect(right_profile_rect, QColor(0, 0, 0, 180))
+        painter.drawText(
+            left_profile_rect.adjusted(padding, padding, -padding, -padding),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            left_profile_text,
+        )
+        painter.drawText(
+            right_profile_rect.adjusted(padding, padding, -padding, -padding),
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+            right_profile_text,
+        )
+        self.left_profile_rect = left_profile_rect
+        self.right_profile_rect = right_profile_rect
+
+        # Resolution labels below profiles
         left_resolution_text = f"{orig_width1} × {orig_height1}"
         left_text_width = font_metrics.horizontalAdvance(left_resolution_text)
         left_text_rect = QRect(
             img1_x + 10,
-            img1_y + scaled_height1 - text_height - padding - 10,
+            left_profile_rect.bottom() - text_height - padding + profile_rect_height,
             left_text_width + 2 * padding,
-            text_height + 2 * padding,
+            profile_rect_height,
         )
         painter.fillRect(left_text_rect, QColor(0, 0, 0, 180))
         painter.drawText(
@@ -490,9 +555,9 @@ class ComparisonViewer(QWidget):
         right_text_width = font_metrics.horizontalAdvance(right_resolution_text)
         right_text_rect = QRect(
             img2_x + scaled_width2 - right_text_width - 2 * padding - 10,
-            img2_y + scaled_height2 - text_height - padding - 10,
+            right_profile_rect.bottom() - text_height - padding + profile_rect_height,
             right_text_width + 2 * padding,
-            text_height + 2 * padding,
+            profile_rect_height,
         )
         painter.fillRect(right_text_rect, QColor(0, 0, 0, 180))
         painter.drawText(
@@ -500,6 +565,64 @@ class ComparisonViewer(QWidget):
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
             right_resolution_text,
         )
+
+    def _build_profile_tooltip(
+        self,
+        profile_name: str,
+        conditions: dict[str, dict[str, bool]] | None,
+        profile_map: dict[str, dict[str, Any]],
+    ) -> str:
+        if profile_name == "Raw":
+            return tr("Original photo")
+        profile = profile_map.get(profile_name, {})
+        lines = [tr("Basic settings:"), f"quality: {profile.get('quality')}"]
+        if profile.get("max_largest_side") is not None:
+            lines.append(f"max_largest_side: {profile.get('max_largest_side')}")
+        if profile.get("max_smallest_side") is not None:
+            lines.append(f"max_smallest_side: {profile.get('max_smallest_side')}")
+        lines.append(f"output_format: {profile.get('output_format')}")
+
+        lines.append(tr("Advanced settings:"))
+        adv = profile.get("advanced_params", {})
+        if adv:
+            fmt = profile.get("output_format", "").upper()
+            diff_str = ", ".join(f"{k}={v}" for k, v in adv.items())
+            lines.append(f"{fmt}: {diff_str}")
+
+        lines.append(tr("Conditions:"))
+        cond_label_map = {
+            "smallest_side": tr("Smallest side"),
+            "largest_side": tr("Largest side"),
+            "pixel_count": tr("Pixels"),
+            "aspect_ratio": tr("Aspect ratio"),
+            "orientation": tr("Orientation"),
+            "input_formats": tr("Input formats"),
+            "requires_transparency": tr("Transparency"),
+            "file_size": tr("File size"),
+            "required_exif": tr("Required EXIF (k=v,...)"),
+        }
+
+        def format_condition(key: str, definition: Any) -> str:
+            label = cond_label_map.get(key, key)
+            if isinstance(definition, dict) and "op" in definition and "value" in definition:
+                return f"{label} {definition['op']} {definition['value']}"
+            if isinstance(definition, list):
+                return f"{label}: {', '.join(str(v) for v in definition)}"
+            if isinstance(definition, bool):
+                return f"{label}: {tr('Requires') if definition else tr('No')}"
+            if isinstance(definition, dict):
+                return f"{label}: {', '.join(f'{k}={v}' for k, v in definition.items())}"
+            if definition is None:
+                return label
+            return f"{label}: {definition}"
+
+        for prof, conds in (conditions or {}).items():
+            lines.append(f"{prof}:")
+            cond_defs = profile_map.get(prof, {}).get("conditions", {})
+            for key, result in conds.items():
+                cond_text = format_condition(key, cond_defs.get(key))
+                lines.append(f"  {cond_text} {'✔' if result else '✖'}")
+        return "\n".join(lines)
 
 
 class ThumbnailWidget(QWidget):
@@ -681,6 +804,8 @@ class CompressionStatsDialog(QDialog):
         param_label_map = {
             "output_format": "Output Format",
             "quality": "Quality",
+            "max_largest_side": "Max largest side",
+            "max_smallest_side": "Max smallest side",
             "progressive": "Progressive",
             "subsampling": "Subsampling",
             "optimize": "Optimize",
@@ -705,6 +830,8 @@ class CompressionStatsDialog(QDialog):
         }
 
         def format_param_value(key: str, value: Any) -> str:
+            if value is None or value == "":
+                return tr("N/A")
             if key == "quality" and isinstance(value, int | float):
                 return f"{int(value)}%"
             if isinstance(value, bool):
@@ -746,62 +873,95 @@ class CompressionStatsDialog(QDialog):
         profiles2 = settings2.get("profiles", [])
         profile_count = max(len(profiles1), len(profiles2))
 
+        format_specific: dict[str, set[str]] = {
+            "jpeg": {"progressive", "subsampling", "optimize", "smooth", "keep_rgb"},
+            "webp": {"lossless", "method", "alpha_quality", "exact"},
+            "avif": {
+                "subsampling",
+                "speed",
+                "codec",
+                "range",
+                "qmin",
+                "qmax",
+                "autotiling",
+                "tile_rows",
+                "tile_cols",
+            },
+        }
+
+        format_defaults = {
+            "jpeg": JPEG_DEFAULTS,
+            "webp": WEBP_DEFAULTS,
+            "avif": AVIF_DEFAULTS,
+        }
+
+        def add_row(label_key: str, val1: Any, val2: Any, grey: bool = False) -> None:
+            nonlocal row
+            metric_label = QLabel(tr(param_label_map.get(label_key, label_key)))
+            val1_label = QLabel(format_param_value(label_key, val1))
+            val2_label = QLabel(format_param_value(label_key, val2))
+            diff_label = QLabel(diff_param_value(label_key, val1, val2))
+            if grey:
+                for lbl in (metric_label, val1_label, val2_label, diff_label):
+                    lbl.setStyleSheet("color: #bdbdbd")
+            layout.addWidget(metric_label, row, 0)
+            layout.addWidget(val1_label, row, 1)
+            layout.addWidget(val2_label, row, 2)
+            layout.addWidget(diff_label, row, 3)
+            row += 1
+
         for idx in range(profile_count):
             p1 = profiles1[idx] if idx < len(profiles1) else {}
             p2 = profiles2[idx] if idx < len(profiles2) else {}
-            header = QLabel(tr("Profile {num}").format(num=idx + 1))
+
+            default_p_name = tr("Profile {num}").format(num=idx + 1)
+            p1_name = p1.get("name", default_p_name)
+            p2_name = p2.get("name", default_p_name)
+            if p1_name != p2_name:
+                header = QLabel(tr("Profiles: {names}").format(names=f"{p1_name}, {p2_name}"))
+            else:
+                header = QLabel(tr("Profile: {name}").format(name=p1_name))
             header.setStyleSheet("font-weight: bold; margin-top: 10px")
             layout.addWidget(header, row, 0, 1, 4)
             row += 1
 
             fmt1 = str(p1.get("output_format", "")).lower()
             fmt2 = str(p2.get("output_format", "")).lower()
+            adv1: dict[str, Any] = p1.get("advanced_params", {})
+            adv2: dict[str, Any] = p2.get("advanced_params", {})
 
-            def add_param_row(
-                profile_key: str,
-                *,
-                _p1: dict[str, Any] = p1,
-                _p2: dict[str, Any] = p2,
-                _fmt1: str = fmt1,
-                _fmt2: str = fmt2,
-            ) -> None:
-                nonlocal row
-                val1 = _p1.get(profile_key, "")
-                val2 = _p2.get(profile_key, "")
-                metric_label = QLabel(tr(param_label_map.get(profile_key, profile_key)))
-                val1_label = QLabel(format_param_value(profile_key, val1))
-                val2_label = QLabel(format_param_value(profile_key, val2))
-                diff_label = QLabel(diff_param_value(profile_key, val1, val2))
-                if val1 == val2 and (profile_key == "output_format" or _fmt1 == _fmt2):
-                    for lbl in (metric_label, val1_label, val2_label, diff_label):
-                        lbl.setStyleSheet("color: #bdbdbd")
-                layout.addWidget(metric_label, row, 0)
-                layout.addWidget(val1_label, row, 1)
-                layout.addWidget(val2_label, row, 2)
-                layout.addWidget(diff_label, row, 3)
+            section = QLabel(tr("Basic settings:"))
+            section.setStyleSheet("font-style: italic")
+            layout.addWidget(section, row, 0, 1, 4)
+            row += 1
+
+            for key in ["output_format", "quality", "max_largest_side", "max_smallest_side"]:
+                basic_val1 = p1.get(key)
+                basic_val2 = p2.get(key)
+                add_row(key, basic_val1, basic_val2, grey=basic_val1 == basic_val2)
+
+            adv_keys = sorted(set(adv1.keys()) | set(adv2.keys()))
+            if adv_keys:
+                section = QLabel(tr("Advanced settings:"))
+                section.setStyleSheet("font-style: italic")
+                layout.addWidget(section, row, 0, 1, 4)
                 row += 1
 
-            add_param_row("output_format")
-            add_param_row("quality")
+            for key in adv_keys:
+                adv_val1: Any
+                adv_val2: Any
 
-            if fmt1 == fmt2:
-                format_specific = {
-                    "jpeg": ["progressive", "subsampling", "optimize", "smooth", "keep_rgb"],
-                    "webp": ["lossless", "method", "alpha_quality", "exact"],
-                    "avif": [
-                        "subsampling",
-                        "speed",
-                        "codec",
-                        "range",
-                        "qmin",
-                        "qmax",
-                        "autotiling",
-                        "tile_rows",
-                        "tile_cols",
-                    ],
-                }
-                for key in format_specific.get(fmt1, []):
-                    add_param_row(key)
+                if key in format_specific.get(fmt1, set()):
+                    adv_val1 = adv1.get(key, format_defaults.get(fmt1, {}).get(key))
+                else:
+                    adv_val1 = tr("N/A")
+                if key in format_specific.get(fmt2, set()):
+                    adv_val2 = adv2.get(key, format_defaults.get(fmt2, {}).get(key))
+                else:
+                    adv_val2 = tr("N/A")
+
+                grey = fmt1 == fmt2 and adv_val1 == adv_val2
+                add_row(key, adv_val1, adv_val2, grey=grey)
 
             cond_label_map = {
                 "smallest_side": "Smallest side",
@@ -962,6 +1122,8 @@ class MainWindow(QMainWindow):
             ]
             | None
         ) = None
+        self.profile_map1: dict[str, dict[str, Any]] = {}
+        self.profile_map2: dict[str, dict[str, Any]] = {}
 
         self.setup_ui()
         self.setup_connections()
@@ -1116,14 +1278,24 @@ class MainWindow(QMainWindow):
         except Exception:
             return
         self.clear_pairs()
+        self.profile_map1 = {}
+        self.profile_map2 = {p["name"]: p for p in data.get("compression_settings", {}).get("profiles", [])}
         for pair in data.get("image_pairs", []):
             orig = pair.get("original")
             comp = pair.get("compressed")
             if orig and comp:
                 name = pair.get("original_name", Path(orig).name)
-                image_pair = ImagePair(orig, comp, name)
+                image_pair = ImagePair(
+                    orig,
+                    comp,
+                    name,
+                    profile2=pair.get("profile", "Raw"),
+                    conditions2=pair.get("conditions"),
+                )
                 self.image_pairs.append(image_pair)
                 self.carousel.add_image_pair(image_pair)
+        self.viewer.profiles1 = self.profile_map1
+        self.viewer.profiles2 = self.profile_map2
         self._preload_thumbnails()
         if self.image_pairs:
             self.load_image_pair_from_thumbnail(self.image_pairs[0])
@@ -1143,8 +1315,26 @@ class MainWindow(QMainWindow):
         self.clear_pairs()
         stats1_file = dir1 / "compression_settings.json"
         stats2_file = dir2 / "compression_settings.json"
-        stats1: Path | None = stats1_file if stats1_file.exists() else None
-        stats2: Path | None = stats2_file if stats2_file.exists() else None
+        data1 = json.load(stats1_file.open()) if stats1_file.exists() else {}
+        data2 = json.load(stats2_file.open()) if stats2_file.exists() else {}
+        self.profile_map1 = {p["name"]: p for p in data1.get("compression_settings", {}).get("profiles", [])}
+        self.profile_map2 = {p["name"]: p for p in data2.get("compression_settings", {}).get("profiles", [])}
+        pair_map1 = {
+            Path(pair.get("compressed", "")).relative_to(dir1).as_posix(): (
+                pair.get("profile", "Raw"),
+                pair.get("conditions", {}),
+            )
+            for pair in data1.get("image_pairs", [])
+            if pair.get("compressed")
+        }
+        pair_map2 = {
+            Path(pair.get("compressed", "")).relative_to(dir2).as_posix(): (
+                pair.get("profile", "Raw"),
+                pair.get("conditions", {}),
+            )
+            for pair in data2.get("image_pairs", [])
+            if pair.get("compressed")
+        }
 
         for file1 in dir1.rglob("*"):
             if not file1.is_file() or file1.suffix.lower() not in SUPPORTED_EXTENSIONS:
@@ -1158,21 +1348,34 @@ class MainWindow(QMainWindow):
                         file2 = candidate
                         break
             if file2.exists():
-                pair_name = rel.as_posix()
-                image_pair = ImagePair(str(file1), str(file2), pair_name)
+                rel2 = file2.relative_to(dir2)
+                key1 = rel.as_posix()
+                key2 = rel2.as_posix()
+                prof1, cond1 = pair_map1.get(key1, ("Raw", {}))
+                prof2, cond2 = pair_map2.get(key2, ("Raw", {}))
+                pair_name = key1 if key1 == key2 else f"{key1} vs {key2}"
+                image_pair = ImagePair(
+                    str(file1),
+                    str(file2),
+                    pair_name,
+                    profile1=prof1,
+                    profile2=prof2,
+                    conditions1=cond1,
+                    conditions2=cond2,
+                )
                 self.image_pairs.append(image_pair)
                 self.carousel.add_image_pair(image_pair)
+
+        self.viewer.profiles1 = self.profile_map1
+        self.viewer.profiles2 = self.profile_map2
 
         self._preload_thumbnails()
 
         if self.image_pairs:
             self.load_image_pair_from_thumbnail(self.image_pairs[0])
 
-        if stats1 and stats2:
+        if data1 and data2:
             try:
-                with stats1.open() as f1, stats2.open() as f2:
-                    data1 = json.load(f1)
-                    data2 = json.load(f2)
                 self.stats_data = (
                     data1.get("stats", {}),
                     data2.get("stats", {}),

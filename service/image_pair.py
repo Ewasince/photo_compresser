@@ -93,6 +93,10 @@ class ImagePair:
     image1_path: str
     image2_path: str
     name: str = ""
+    profile1: str = "Raw"
+    profile2: str = "Raw"
+    conditions1: dict[str, dict[str, bool]] | None = None
+    conditions2: dict[str, dict[str, bool]] | None = None
 
     def __post_init__(self) -> None:  # pragma: no cover - simple post-init
         if not self.name:
