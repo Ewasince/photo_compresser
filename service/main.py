@@ -764,9 +764,7 @@ class MainWindow(QMainWindow):
             unsupported_dir=unsupported_dir,
             output_format=default_profile.output_format,
         )
-        compressor.set_jpeg_parameters(**default_profile.jpeg_params)
-        compressor.set_webp_parameters(**default_profile.webp_params)
-        compressor.set_avif_parameters(**default_profile.avif_params)
+        compressor.apply_profile(default_profile)
 
         compression_settings = {
             "input_directory": str(self.input_directory),

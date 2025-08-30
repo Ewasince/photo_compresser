@@ -138,9 +138,7 @@ class CompressionProfile:
     max_largest_side: int | None = None
     max_smallest_side: int | None = None
     output_format: str = "JPEG"
-    jpeg_params: dict[str, Any] = field(default_factory=dict)
-    webp_params: dict[str, Any] = field(default_factory=dict)
-    avif_params: dict[str, Any] = field(default_factory=dict)
+    advanced_params: dict[str, Any] = field(default_factory=dict)
     conditions: ProfileConditions = field(default_factory=ProfileConditions)
 
 
@@ -160,15 +158,23 @@ def load_profiles(file_path: Path) -> list[CompressionProfile]:
     profiles: list[CompressionProfile] = []
     for item in raw:
         cond = ProfileConditions.from_dict(item.get("conditions", {}))
+        fmt = item.get("output_format", "JPEG")
+        # Backwards compatibility for older profile files
+        if "advanced_params" in item:
+            adv = item.get("advanced_params", {})
+        else:
+            adv = (
+                item.get("jpeg_params", {})
+                if fmt.upper() == "JPEG"
+                else (item.get("webp_params", {}) if fmt.upper() == "WEBP" else item.get("avif_params", {}))
+            )
         profile = CompressionProfile(
             name=item["name"],
             quality=item.get("quality", 75),
             max_largest_side=item.get("max_largest_side"),
             max_smallest_side=item.get("max_smallest_side"),
-            output_format=item.get("output_format", "JPEG"),
-            jpeg_params=item.get("jpeg_params", {}),
-            webp_params=item.get("webp_params", {}),
-            avif_params=item.get("avif_params", {}),
+            output_format=fmt,
+            advanced_params=adv,
             conditions=cond,
         )
         profiles.append(profile)

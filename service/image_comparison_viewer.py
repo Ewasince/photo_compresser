@@ -51,7 +51,6 @@ from PySide6.QtWidgets import (
 from service.constants import SUPPORTED_EXTENSIONS
 from service.file_utils import format_timedelta
 from service.image_pair import ImagePair
-from service.parameters_defaults import AVIF_DEFAULTS, JPEG_DEFAULTS, WEBP_DEFAULTS
 from service.translator import tr
 
 BUTTON_STYLE = """
@@ -579,17 +578,11 @@ class ComparisonViewer(QWidget):
         lines.append(f"output_format: {profile.get('output_format')}")
 
         lines.append(tr("Advanced settings:"))
-        for key, defaults in [
-            ("jpeg_params", JPEG_DEFAULTS),
-            ("webp_params", WEBP_DEFAULTS),
-            ("avif_params", AVIF_DEFAULTS),
-        ]:
-            params = profile.get(key, {})
-            diff = {k: v for k, v in params.items() if defaults.get(k) != v}
-            if diff:
-                fmt = key.split("_")[0].upper()
-                diff_str = ", ".join(f"{k}={v}" for k, v in diff.items())
-                lines.append(f"{fmt}: {diff_str}")
+        adv = profile.get("advanced_params", {})
+        if adv:
+            fmt = profile.get("output_format", "").upper()
+            diff_str = ", ".join(f"{k}={v}" for k, v in adv.items())
+            lines.append(f"{fmt}: {diff_str}")
 
         lines.append(tr("Conditions:"))
         cond_label_map = {

@@ -480,25 +480,53 @@ class ProfilePanel(QWidget):
     # ------------------------------------------------------------------
     def get_parameters(self) -> dict[str, Any]:
         """Return compression parameters from the panel."""
-        return {
-            "quality": self.quality.value(),
-            "max_largest_side": self.max_largest.value() if self.max_largest_cb.isChecked() else None,
-            "max_smallest_side": self.max_smallest.value() if self.max_smallest_cb.isChecked() else None,
-            "output_format": self.format_combo.currentText(),
-            "jpeg_params": {
+        fmt = self.format_combo.currentText().upper()
+        adv: dict[str, Any] = {}
+        defaults: dict[str, Any]
+        params: dict[str, Any]
+        if fmt == "JPEG":
+            defaults = {
+                "progressive": JPEG_DEFAULTS["progressive"],
+                "subsampling": SUBSAMPLING_MAP[JPEG_DEFAULTS["subsampling"]],
+                "optimize": JPEG_DEFAULTS["optimize"],
+                "smooth": JPEG_DEFAULTS["smooth"],
+                "keep_rgb": JPEG_DEFAULTS["keep_rgb"],
+            }
+            params = {
                 "progressive": self.jpeg_progressive.isChecked(),
                 "subsampling": SUBSAMPLING_MAP[self.jpeg_subsampling.currentText()],
                 "optimize": self.jpeg_optimize.isChecked(),
                 "smooth": self.jpeg_smooth.value(),
                 "keep_rgb": self.jpeg_keep_rgb.isChecked(),
-            },
-            "webp_params": {
+            }
+            adv = {k: v for k, v in params.items() if defaults.get(k) != v}
+        elif fmt == "WEBP":
+            defaults = {
+                "lossless": WEBP_DEFAULTS["lossless"],
+                "method": WEBP_DEFAULTS["method"],
+                "alpha_quality": WEBP_DEFAULTS["alpha_quality"],
+                "exact": WEBP_DEFAULTS["exact"],
+            }
+            params = {
                 "lossless": self.webp_lossless.isChecked(),
                 "method": self.webp_method.value(),
                 "alpha_quality": self.webp_alpha_quality.value(),
                 "exact": self.webp_exact.isChecked(),
-            },
-            "avif_params": {
+            }
+            adv = {k: v for k, v in params.items() if defaults.get(k) != v}
+        elif fmt == "AVIF":
+            defaults = {
+                "subsampling": AVIF_DEFAULTS["subsampling"],
+                "speed": AVIF_DEFAULTS["speed"],
+                "codec": AVIF_DEFAULTS["codec"],
+                "range": AVIF_DEFAULTS["range"],
+                "qmin": AVIF_DEFAULTS["qmin"],
+                "qmax": AVIF_DEFAULTS["qmax"],
+                "autotiling": AVIF_DEFAULTS["autotiling"],
+                "tile_rows": AVIF_DEFAULTS["tile_rows"],
+                "tile_cols": AVIF_DEFAULTS["tile_cols"],
+            }
+            params = {
                 "subsampling": self.avif_subsampling.currentText(),
                 "speed": self.avif_speed.value(),
                 "codec": self.avif_codec.currentText(),
@@ -508,7 +536,15 @@ class ProfilePanel(QWidget):
                 "autotiling": self.avif_autotiling.isChecked(),
                 "tile_rows": self.avif_tile_rows.value(),
                 "tile_cols": self.avif_tile_cols.value(),
-            },
+            }
+            adv = {k: v for k, v in params.items() if defaults.get(k) != v}
+
+        return {
+            "quality": self.quality.value(),
+            "max_largest_side": self.max_largest.value() if self.max_largest_cb.isChecked() else None,
+            "max_smallest_side": self.max_smallest.value() if self.max_smallest_cb.isChecked() else None,
+            "output_format": fmt,
+            "advanced_params": adv,
         }
 
     def get_conditions(self) -> ProfileConditions:
@@ -547,9 +583,7 @@ class ProfilePanel(QWidget):
             max_largest_side=params["max_largest_side"],
             max_smallest_side=params["max_smallest_side"],
             output_format=params["output_format"],
-            jpeg_params=params["jpeg_params"],
-            webp_params=params["webp_params"],
-            avif_params=params["avif_params"],
+            advanced_params=params["advanced_params"],
         )
         profile.conditions = self.get_conditions()
         return profile
@@ -574,30 +608,57 @@ class ProfilePanel(QWidget):
 
         self.format_combo.setCurrentText(profile.output_format)
 
-        jpeg = profile.jpeg_params
-        self.jpeg_progressive.setChecked(jpeg.get("progressive", JPEG_DEFAULTS["progressive"]))
-        default_sub = SUBSAMPLING_MAP[JPEG_DEFAULTS["subsampling"]]
-        self.jpeg_subsampling.setCurrentText(subsampling_label(jpeg.get("subsampling", default_sub)))
-        self.jpeg_optimize.setChecked(jpeg.get("optimize", JPEG_DEFAULTS["optimize"]))
-        self.jpeg_smooth.setValue(jpeg.get("smooth", JPEG_DEFAULTS["smooth"]))
-        self.jpeg_keep_rgb.setChecked(jpeg.get("keep_rgb", JPEG_DEFAULTS["keep_rgb"]))
-
-        webp = profile.webp_params
-        self.webp_lossless.setChecked(webp.get("lossless", WEBP_DEFAULTS["lossless"]))
-        self.webp_method.setValue(webp.get("method", WEBP_DEFAULTS["method"]))
-        self.webp_alpha_quality.setValue(webp.get("alpha_quality", WEBP_DEFAULTS["alpha_quality"]))
-        self.webp_exact.setChecked(webp.get("exact", WEBP_DEFAULTS["exact"]))
-
-        avif = profile.avif_params
-        self.avif_subsampling.setCurrentText(avif.get("subsampling", AVIF_DEFAULTS["subsampling"]))
-        self.avif_speed.setValue(avif.get("speed", AVIF_DEFAULTS["speed"]))
-        self.avif_codec.setCurrentText(avif.get("codec", AVIF_DEFAULTS["codec"]))
-        self.avif_range.setCurrentText(avif.get("range", AVIF_DEFAULTS["range"]))
-        self.avif_qmin.setValue(avif.get("qmin", AVIF_DEFAULTS["qmin"]))
-        self.avif_qmax.setValue(avif.get("qmax", AVIF_DEFAULTS["qmax"]))
-        self.avif_autotiling.setChecked(avif.get("autotiling", AVIF_DEFAULTS["autotiling"]))
-        self.avif_tile_rows.setValue(avif.get("tile_rows", AVIF_DEFAULTS["tile_rows"]))
-        self.avif_tile_cols.setValue(avif.get("tile_cols", AVIF_DEFAULTS["tile_cols"]))
+        fmt = profile.output_format.upper()
+        params = profile.advanced_params
+        merged: dict[str, Any]
+        if fmt == "JPEG":
+            merged = {
+                "progressive": JPEG_DEFAULTS["progressive"],
+                "subsampling": SUBSAMPLING_MAP[JPEG_DEFAULTS["subsampling"]],
+                "optimize": JPEG_DEFAULTS["optimize"],
+                "smooth": JPEG_DEFAULTS["smooth"],
+                "keep_rgb": JPEG_DEFAULTS["keep_rgb"],
+            }
+            merged.update(params)
+            self.jpeg_progressive.setChecked(merged["progressive"])
+            self.jpeg_subsampling.setCurrentText(subsampling_label(merged["subsampling"]))
+            self.jpeg_optimize.setChecked(merged["optimize"])
+            self.jpeg_smooth.setValue(merged["smooth"])
+            self.jpeg_keep_rgb.setChecked(merged["keep_rgb"])
+        elif fmt == "WEBP":
+            merged = {
+                "lossless": WEBP_DEFAULTS["lossless"],
+                "method": WEBP_DEFAULTS["method"],
+                "alpha_quality": WEBP_DEFAULTS["alpha_quality"],
+                "exact": WEBP_DEFAULTS["exact"],
+            }
+            merged.update(params)
+            self.webp_lossless.setChecked(merged["lossless"])
+            self.webp_method.setValue(merged["method"])
+            self.webp_alpha_quality.setValue(merged["alpha_quality"])
+            self.webp_exact.setChecked(merged["exact"])
+        elif fmt == "AVIF":
+            merged = {
+                "subsampling": AVIF_DEFAULTS["subsampling"],
+                "speed": AVIF_DEFAULTS["speed"],
+                "codec": AVIF_DEFAULTS["codec"],
+                "range": AVIF_DEFAULTS["range"],
+                "qmin": AVIF_DEFAULTS["qmin"],
+                "qmax": AVIF_DEFAULTS["qmax"],
+                "autotiling": AVIF_DEFAULTS["autotiling"],
+                "tile_rows": AVIF_DEFAULTS["tile_rows"],
+                "tile_cols": AVIF_DEFAULTS["tile_cols"],
+            }
+            merged.update(params)
+            self.avif_subsampling.setCurrentText(merged["subsampling"])
+            self.avif_speed.setValue(merged["speed"])
+            self.avif_codec.setCurrentText(merged["codec"])
+            self.avif_range.setCurrentText(merged["range"])
+            self.avif_qmin.setValue(merged["qmin"])
+            self.avif_qmax.setValue(merged["qmax"])
+            self.avif_autotiling.setChecked(merged["autotiling"])
+            self.avif_tile_rows.setValue(merged["tile_rows"])
+            self.avif_tile_cols.setValue(merged["tile_cols"])
 
         cond = profile.conditions
         if cond.smallest_side is not None:

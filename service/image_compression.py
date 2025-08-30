@@ -77,9 +77,16 @@ class ImageCompressor:
         self.max_largest_side = profile.max_largest_side
         self.max_smallest_side = profile.max_smallest_side
         self.output_format = profile.output_format.upper()
-        self.set_jpeg_parameters(**profile.jpeg_params)
-        self.set_webp_parameters(**profile.webp_params)
-        self.set_avif_parameters(**profile.avif_params)
+        self.jpeg_params.clear()
+        self.webp_params.clear()
+        self.avif_params.clear()
+        fmt = profile.output_format.upper()
+        if fmt == "JPEG":
+            self.set_jpeg_parameters(**profile.advanced_params)
+        elif fmt == "WEBP":
+            self.set_webp_parameters(**profile.advanced_params)
+        elif fmt == "AVIF":
+            self.set_avif_parameters(**profile.advanced_params)
 
     def set_jpeg_parameters(self, **kwargs: Any) -> None:
         """Set JPEG-specific compression parameters."""
