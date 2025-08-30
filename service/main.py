@@ -208,8 +208,9 @@ class MainWindow(QMainWindow):
 
         # Input directory selection
         input_dir_layout = QHBoxLayout()
-        self.input_dir_label = QLabel(tr("No input directory selected"))
-        self.input_dir_label.setStyleSheet(
+        self.input_dir_edit = QLineEdit()
+        self.input_dir_edit.setPlaceholderText(tr("No input directory selected"))
+        self.input_dir_edit.setStyleSheet(
             "padding: 8px; background-color: white; border: 1px solid #ccc; border-radius: 4px;"
         )
         self.select_input_btn = QPushButton(tr("Select Input Directory"))
@@ -230,7 +231,7 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        input_dir_layout.addWidget(self.input_dir_label, 1)
+        input_dir_layout.addWidget(self.input_dir_edit, 1)
         input_dir_layout.addWidget(self.select_input_btn)
         input_layout.addLayout(input_dir_layout)
 
@@ -271,6 +272,10 @@ class MainWindow(QMainWindow):
         self.preserve_structure_cb = QCheckBox(tr("Preserve folder structure"))
         self.preserve_structure_cb.setChecked(GLOBAL_DEFAULTS["preserve_structure"])
         input_layout.addWidget(self.preserve_structure_cb)
+
+        self.copy_unsupported_cb = QCheckBox(tr("Copy unsupported files"))
+        self.copy_unsupported_cb.setChecked(GLOBAL_DEFAULTS["copy_unsupported"])
+        input_layout.addWidget(self.copy_unsupported_cb)
 
         main_layout.addWidget(self.input_group)
 
@@ -421,6 +426,7 @@ class MainWindow(QMainWindow):
         """Set up signal connections."""
         self.select_input_btn.clicked.connect(self.select_input_directory)
         self.select_output_btn.clicked.connect(self.select_output_directory)
+        self.input_dir_edit.textChanged.connect(self.update_input_directory_from_text)
         self.output_dir_edit.textChanged.connect(self.update_output_directory_from_text)
         self.compress_btn.clicked.connect(self.start_compression)
         self.compare_btn.clicked.connect(self.show_comparison)
@@ -451,13 +457,14 @@ class MainWindow(QMainWindow):
         self.title_label.setText(tr("Image Compression Tool"))
         self.input_group.setTitle(tr("Input Settings"))
         if self.input_directory is None:
-            self.input_dir_label.setText(tr("No input directory selected"))
+            self.input_dir_edit.setPlaceholderText(tr("No input directory selected"))
         self.select_input_btn.setText(tr("Select Input Directory"))
         if self.output_directory is None:
             self.output_dir_edit.setPlaceholderText(tr("No output directory selected"))
         self.regen_output_btn.setToolTip(tr("Regenerate output directory name"))
         self.select_output_btn.setText(tr("Select Output Directory"))
         self.preserve_structure_cb.setText(tr("Preserve folder structure"))
+        self.copy_unsupported_cb.setText(tr("Copy unsupported files"))
         self.save_profiles_btn.setText(tr("Save Profiles"))
         self.load_profiles_btn.setText(tr("Load Profiles"))
         self.add_profile_btn.setText(tr("Add Profile"))
@@ -478,7 +485,7 @@ class MainWindow(QMainWindow):
 
         if directory:
             self.input_directory = Path(directory)
-            self.input_dir_label.setText(str(self.input_directory))
+            self.input_dir_edit.setText(str(self.input_directory))
             self.output_directory = self.generate_output_directory()
             self.output_dir_edit.setText(str(self.output_directory))
             self.compress_btn.setEnabled(True)
@@ -492,6 +499,7 @@ class MainWindow(QMainWindow):
         self.profile_panels.clear()
         self.add_profile_panel()
         self.preserve_structure_cb.setChecked(GLOBAL_DEFAULTS["preserve_structure"])
+        self.copy_unsupported_cb.setChecked(GLOBAL_DEFAULTS["copy_unsupported"])
         self.log_message(tr("Compression settings reset to defaults"))
 
     def select_output_directory(self) -> None:
@@ -505,6 +513,20 @@ class MainWindow(QMainWindow):
             self.output_directory = Path(directory)
             self.output_dir_edit.setText(str(self.output_directory))
             self.log_message(tr("Selected output directory: {path}").format(path=self.output_directory))
+
+    def update_input_directory_from_text(self, text: str) -> None:
+        """Update stored input directory when text changes."""
+        path = Path(text)
+        if text and path.exists():
+            self.input_directory = path
+            self.compress_btn.setEnabled(True)
+            self.compare_btn.setEnabled(True)
+            self.output_directory = self.generate_output_directory()
+            self.output_dir_edit.setText(str(self.output_directory))
+        else:
+            self.input_directory = None
+            self.compress_btn.setEnabled(False)
+            self.compare_btn.setEnabled(False)
 
     def update_output_directory_from_text(self, text: str) -> None:
         """Update stored output directory when text changes."""
@@ -595,11 +617,13 @@ class MainWindow(QMainWindow):
         default_profile = profiles[0]
 
         preserve_structure = self.preserve_structure_cb.isChecked()
+        copy_unsupported = self.copy_unsupported_cb.isChecked()
         compressor = ImageCompressor(
             quality=default_profile.quality,
             max_largest_side=default_profile.max_largest_side,
             max_smallest_side=default_profile.max_smallest_side,
             preserve_structure=preserve_structure,
+            copy_unsupported=copy_unsupported,
             output_format=default_profile.output_format,
         )
         compressor.set_jpeg_parameters(**default_profile.jpeg_params)
@@ -611,6 +635,7 @@ class MainWindow(QMainWindow):
             "output_directory": str(self.output_directory),
             "profiles": [asdict(p) for p in profiles],
             "preserve_structure": preserve_structure,
+            "copy_unsupported": copy_unsupported,
         }
 
         # Create and start worker thread

@@ -54,9 +54,12 @@ python main.py
    - **Max Largest Side**: Максимальный размер наибольшей стороны в пикселях
    - **Max Smallest Side**: Максимальный размер наименьшей стороны в пикселях
    - **Output Format**: Формат вывода (JPEG, WebP, AVIF)
-   - **Preserve folder structure**: 
+   - **Preserve folder structure**:
      - ✅ Включено: Сохраняет структуру папок (например, `Photos/Vacation/IMG_001.jpg` → `Photos_compressed/Vacation/IMG_001.jpg`)
      - ❌ Выключено: Все файлы помещаются в одну папку (например, `Photos/Vacation/IMG_001.jpg` → `Photos_compressed/IMG_001.jpg`)
+   - **Copy unsupported files**:
+     - ✅ Включено: копирует файлы неподдерживаемых форматов в выходную папку
+     - ❌ Выключено: файлы неподдерживаемых форматов игнорируются
 3. **Запуск сжатия**: Нажмите "Start Compression"
 4. **Просмотр результатов**: После завершения нажмите "Compare Images"
 

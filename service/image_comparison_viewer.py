@@ -699,6 +699,7 @@ class CompressionStatsDialog(QDialog):
             "tile_rows": "Tile Rows",
             "tile_cols": "Tile Cols",
             "preserve_structure": "Preserve folder structure",
+            "copy_unsupported": "Copy unsupported files",
         }
 
         def format_param_value(key: str, value: Any) -> str:
@@ -735,6 +736,7 @@ class CompressionStatsDialog(QDialog):
             row += 1
 
         add_global_row("preserve_structure")
+        add_global_row("copy_unsupported")
 
         profiles1 = settings1.get("profiles", [])
         profiles2 = settings2.get("profiles", [])

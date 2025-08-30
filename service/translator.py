@@ -59,6 +59,7 @@ _translations: dict[str, dict[str, str]] = {
         "Successfully compressed: {name}": "Успешно сжат: {name}",
         "Failed to compress: {name}": "Не удалось сжать: {name}",
         "Copied file: {name}": "Скопирован файл: {name}",
+        "Skipped unsupported file: {name}": "Пропущен неподдерживаемый файл: {name}",
         "Compression complete: {compressed}/{total} files processed": (
             "Сжатие завершено: {compressed}/{total} файлов обработано"
         ),
@@ -117,6 +118,7 @@ _translations: dict[str, dict[str, str]] = {
         "Max smallest side": "Макс. меньшая сторона",
         "Format": "Формат",
         "Preserve folder structure": "Сохранить структуру папок",
+        "Copy unsupported files": "Копировать неподдерживаемые файлы",
         "Advanced Settings": "Расширенные настройки",
         "Exact alpha": "Точная альфа",
         "Smallest side": "Меньшая сторона",
