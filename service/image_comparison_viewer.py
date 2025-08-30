@@ -592,9 +592,38 @@ class ComparisonViewer(QWidget):
                 lines.append(f"{fmt}: {diff_str}")
 
         lines.append(tr("Conditions:"))
+        cond_label_map = {
+            "smallest_side": tr("Smallest side"),
+            "largest_side": tr("Largest side"),
+            "pixel_count": tr("Pixels"),
+            "aspect_ratio": tr("Aspect ratio"),
+            "orientation": tr("Orientation"),
+            "input_formats": tr("Input formats"),
+            "requires_transparency": tr("Transparency"),
+            "file_size": tr("File size"),
+            "required_exif": tr("Required EXIF (k=v,...)"),
+        }
+
+        def format_condition(key: str, definition: Any) -> str:
+            label = cond_label_map.get(key, key)
+            if isinstance(definition, dict) and "op" in definition and "value" in definition:
+                return f"{label} {definition['op']} {definition['value']}"
+            if isinstance(definition, list):
+                return f"{label}: {', '.join(str(v) for v in definition)}"
+            if isinstance(definition, bool):
+                return f"{label}: {tr('Requires') if definition else tr('No')}"
+            if isinstance(definition, dict):
+                return f"{label}: {', '.join(f'{k}={v}' for k, v in definition.items())}"
+            if definition is None:
+                return label
+            return f"{label}: {definition}"
+
         for prof, conds in (conditions or {}).items():
-            cond_str = ", ".join(f"{c}={'✔' if res else '✖'}" for c, res in conds.items())
-            lines.append(f"{prof}: {cond_str}")
+            lines.append(f"{prof}:")
+            cond_defs = profile_map.get(prof, {}).get("conditions", {})
+            for key, result in conds.items():
+                cond_text = format_condition(key, cond_defs.get(key))
+                lines.append(f"  {cond_text} {'✔' if result else '✖'}")
         return "\n".join(lines)
 
 
@@ -1284,9 +1313,12 @@ class MainWindow(QMainWindow):
                         file2 = candidate
                         break
             if file2.exists():
-                pair_name = rel.as_posix()
-                prof1, cond1 = pair_map1.get(pair_name, ("Raw", {}))
-                prof2, cond2 = pair_map2.get(pair_name, ("Raw", {}))
+                rel2 = file2.relative_to(dir2)
+                key1 = rel.as_posix()
+                key2 = rel2.as_posix()
+                prof1, cond1 = pair_map1.get(key1, ("Raw", {}))
+                prof2, cond2 = pair_map2.get(key2, ("Raw", {}))
+                pair_name = key1 if key1 == key2 else f"{key1} vs {key2}"
                 image_pair = ImagePair(
                     str(file1),
                     str(file2),
