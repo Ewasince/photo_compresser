@@ -669,6 +669,8 @@ class CompressionStatsDialog(QDialog):
         stats2: dict[str, Any],
         settings1: dict[str, Any],
         settings2: dict[str, Any],
+        dir1: Path | None,
+        dir2: Path | None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -951,6 +953,21 @@ class CompressionStatsDialog(QDialog):
                 elif v2 < v1:
                     label2.setStyleSheet("background-color: #228B22; color: white;")
 
+        buttons_layout = QHBoxLayout()
+        open1 = QPushButton(tr("Open Folder 1"))
+        open2 = QPushButton(tr("Open Folder 2"))
+        open1.setStyleSheet(BUTTON_STYLE)
+        open2.setStyleSheet(BUTTON_STYLE)
+        open1.setEnabled(dir1 is not None)
+        open2.setEnabled(dir2 is not None)
+        if dir1 is not None:
+            open1.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(dir1))))
+        if dir2 is not None:
+            open2.clicked.connect(lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(dir2))))
+        buttons_layout.addWidget(open1)
+        buttons_layout.addWidget(open2)
+        layout.addLayout(buttons_layout, row, 0, 1, 4)
+
 
 class MainWindow(QMainWindow):
     """Main application window."""
@@ -1009,14 +1026,6 @@ class MainWindow(QMainWindow):
         self.reset_button = QPushButton(tr("Reset View"))
         self.reset_button.setStyleSheet(BUTTON_STYLE)
 
-        self.open_dir1_button = QPushButton(tr("Open Folder 1"))
-        self.open_dir1_button.setEnabled(False)
-        self.open_dir1_button.setStyleSheet(BUTTON_STYLE)
-
-        self.open_dir2_button = QPushButton(tr("Open Folder 2"))
-        self.open_dir2_button.setEnabled(False)
-        self.open_dir2_button.setStyleSheet(BUTTON_STYLE)
-
         self.stats_button = QPushButton(tr("Compare Stats"))
         self.stats_button.setEnabled(False)
         self.stats_button.setStyleSheet(BUTTON_STYLE)
@@ -1025,8 +1034,6 @@ class MainWindow(QMainWindow):
         controls_layout.addWidget(self.load_button)
         controls_layout.addWidget(self.load_dirs_button)
         controls_layout.addWidget(self.reset_button)
-        controls_layout.addWidget(self.open_dir1_button)
-        controls_layout.addWidget(self.open_dir2_button)
         controls_layout.addWidget(self.stats_button)
         controls_layout.addStretch()
 
@@ -1051,8 +1058,6 @@ class MainWindow(QMainWindow):
         self.load_button.clicked.connect(self.load_image_pair)
         self.load_dirs_button.clicked.connect(self.load_directories)
         self.reset_button.clicked.connect(self.reset_view)
-        self.open_dir1_button.clicked.connect(self.open_dir1)
-        self.open_dir2_button.clicked.connect(self.open_dir2)
         self.stats_button.clicked.connect(self.show_stats)
         self.carousel.thumbnail_clicked.connect(self.load_image_pair_from_thumbnail)
 
@@ -1092,14 +1097,6 @@ class MainWindow(QMainWindow):
 
         self.update_status()
 
-    def open_dir1(self) -> None:
-        if self.dir1:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.dir1)))
-
-    def open_dir2(self) -> None:
-        if self.dir2:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.dir2)))
-
     def clear_pairs(self) -> None:
         """Clear loaded image pairs and thumbnails."""
         self.image_pairs.clear()
@@ -1111,8 +1108,6 @@ class MainWindow(QMainWindow):
         self.stats_button.setEnabled(False)
         self.dir1 = None
         self.dir2 = None
-        self.open_dir1_button.setEnabled(False)
-        self.open_dir2_button.setEnabled(False)
         self.update_status()
 
     def _preload_thumbnails(self) -> None:
@@ -1175,8 +1170,6 @@ class MainWindow(QMainWindow):
         self.clear_pairs()
         self.dir1 = dir1
         self.dir2 = dir2
-        self.open_dir1_button.setEnabled(True)
-        self.open_dir2_button.setEnabled(True)
         stats1_file = dir1 / "compression_settings.json"
         stats2_file = dir2 / "compression_settings.json"
         stats1: Path | None = stats1_file if stats1_file.exists() else None
@@ -1241,6 +1234,8 @@ class MainWindow(QMainWindow):
             self.stats_data[1],
             self.stats_data[2],
             self.stats_data[3],
+            self.dir1,
+            self.dir2,
             self,
         )
         dialog.exec()
