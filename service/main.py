@@ -96,11 +96,12 @@ class CompressionWorker(QThread):
             )
 
             # Get compression statistics
+            failed_paths = [f for f, _ in failed_files]
             stats = self.compressor.get_compression_stats(
                 self.input_dir,
                 self.output_dir,
                 compressed_paths,
-                failed_files,
+                failed_paths,
             )
             stats["total_files"] = total_files
             stats["compressed_files"] = compressed_files

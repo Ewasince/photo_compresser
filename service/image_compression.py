@@ -95,7 +95,7 @@ class ImageCompressor:
         input_path: Path,
         output_path: Path,
         img: Image.Image | None = None,
-    ) -> Path | None:
+    ) -> tuple[Path | None, str | None]:
         """Compress a single image and save it to ``output_path``.
 
         Args:
@@ -106,16 +106,17 @@ class ImageCompressor:
                 disk reads.
 
         Returns:
-            Path to saved image if successful, otherwise ``None``
+            Tuple of saved image path and error message. ``error`` is ``None``
+            when compression succeeds.
         """
         try:
             if img is None:
                 with Image.open(input_path) as opened:
-                    return self._compress_open_image(opened, input_path, output_path)
-            return self._compress_open_image(img, input_path, output_path)
+                    return self._compress_open_image(opened, input_path, output_path), None
+            return self._compress_open_image(img, input_path, output_path), None
         except Exception as e:
             logger.exception(f"Error compressing {input_path}: {e}")
-            return None
+            return None, str(e)
 
     def _compress_open_image(self, img: Image.Image, input_path: Path, output_path: Path) -> Path | None:
         """Core implementation for :meth:`compress_image` working on an open image."""
@@ -284,7 +285,7 @@ class ImageCompressor:
         log_callback: Callable[[str], None] | None = None,
         num_workers: int | None = None,
         stop_event: Event | None = None,
-    ) -> tuple[int, int, list[Path], list[Path]]:
+    ) -> tuple[int, int, list[Path], list[tuple[Path, str]]]:
         """
         Process a directory recursively, compressing all supported images.
 
@@ -293,13 +294,15 @@ class ImageCompressor:
             output_root: Root output directory
 
         Returns:
-            Tuple of (total_files, compressed_files, compressed_paths, failed_files)
+            Tuple of (total_files, compressed_files, compressed_paths,
+            failed_files). ``failed_files`` contains tuples of image path and
+            the associated error message.
         """
         total_files = sum(1 for f in input_root.rglob("*") if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS)
         processed_files = 0
         compressed_files = 0
         compressed_paths: list[Path] = []
-        failed_files: list[Path] = []
+        failed_files: list[tuple[Path, str]] = []
 
         if progress_callback:
             progress_callback(0, total_files)
@@ -365,30 +368,34 @@ class ImageCompressor:
                 if log_callback:
                     log_callback(msg)
 
-        def _compress_task(src: Path) -> tuple[Path | None, Path, str]:
-            with Image.open(src) as img:
-                profile = select_profile(img, profiles) if profiles else None
-                comp = _clone_with_profile(profile)
-                new_extension = comp._get_extension_according_format()
-                if comp.preserve_structure:
-                    rel_path = src.relative_to(input_root)
-                    output_file = output_root / rel_path
-                    output_file = output_file.with_suffix(new_extension)
-                else:
-                    base_name = src.stem
-                    counter = 1
-                    with used_names_lock:
-                        output_file = output_root / f"{base_name}{new_extension}"
-                        while output_file in used_names or output_file.exists():
-                            output_file = output_root / f"{base_name}_{counter}{new_extension}"
-                            counter += 1
-                        used_names.add(output_file)
+        def _compress_task(src: Path) -> tuple[Path | None, Path, str, str | None]:
+            try:
+                with Image.open(src) as img:
+                    profile = select_profile(img, profiles) if profiles else None
+                    comp = _clone_with_profile(profile)
+                    new_extension = comp._get_extension_according_format()
+                    if comp.preserve_structure:
+                        rel_path = src.relative_to(input_root)
+                        output_file = output_root / rel_path
+                        output_file = output_file.with_suffix(new_extension)
+                    else:
+                        base_name = src.stem
+                        counter = 1
+                        with used_names_lock:
+                            output_file = output_root / f"{base_name}{new_extension}"
+                            while output_file in used_names or output_file.exists():
+                                output_file = output_root / f"{base_name}_{counter}{new_extension}"
+                                counter += 1
+                            used_names.add(output_file)
 
-                saved = comp.compress_image(src, output_file, img)
-                profile_name = profile.name if profile else tr("Default")
-            if saved:
-                copy_times_from_src(src, saved)
-            return saved, src, profile_name
+                    saved, error = comp.compress_image(src, output_file, img)
+                    profile_name = profile.name if profile else tr("Default")
+                if saved:
+                    copy_times_from_src(src, saved)
+                return saved, src, profile_name, error
+            except Exception as e:  # Handle errors opening the image
+                logger.exception(f"Error processing {src}: {e}")
+                return None, src, tr("Default"), str(e)
 
         if worker_count > 1:
             with ThreadPoolExecutor(max_workers=worker_count) as executor:
@@ -397,7 +404,7 @@ class ImageCompressor:
                     if stop_event and stop_event.is_set():
                         executor.shutdown(wait=False, cancel_futures=True)
                         break
-                    saved_path, src_file, profile_name = future.result()
+                    saved_path, src_file, profile_name, error = future.result()
                     if saved_path:
                         compressed_files += 1
                         compressed_paths.append(saved_path)
@@ -406,7 +413,7 @@ class ImageCompressor:
                         )
                         logger.info(msg)
                     else:
-                        failed_files.append(src_file)
+                        failed_files.append((src_file, error or ""))
                         msg = tr("Failed to compress: {name}").format(name=src_file.name)
                         logger.warning(msg)
                     if log_callback:
@@ -418,7 +425,7 @@ class ImageCompressor:
             for src in tasks:
                 if stop_event and stop_event.is_set():
                     break
-                saved_path, _, profile_name = _compress_task(src)
+                saved_path, _, profile_name, error = _compress_task(src)
                 if saved_path:
                     compressed_files += 1
                     compressed_paths.append(saved_path)
@@ -427,7 +434,7 @@ class ImageCompressor:
                     )
                     logger.info(msg)
                 else:
-                    failed_files.append(src)
+                    failed_files.append((src, error or ""))
                     msg = tr("Failed to compress: {name}").format(name=src.name)
                     logger.warning(msg)
                 if log_callback:
@@ -567,7 +574,7 @@ def save_compression_settings(
     compression_settings: dict[str, Any],
     image_pairs: list[tuple[Path, Path]],
     stats: dict[str, Any],
-    failed_files: list[Path] | None = None,
+    failed_files: list[tuple[Path, str]] | None = None,
     conversion_time: str | None = None,
 ) -> Path | None:
     """
@@ -577,7 +584,8 @@ def save_compression_settings(
         output_dir: Directory where to save the settings file
         compression_settings: Dictionary with compression parameters
         image_pairs: List of image pairs for comparison
-        failed_files: List of image paths that failed to compress
+        failed_files: List of tuples ``(path, error)`` for images that failed to
+            compress
         conversion_time: Human-readable duration of the compression process
     """
     import json
@@ -598,7 +606,7 @@ def save_compression_settings(
             for original_path, compressed_path in image_pairs
         ],
         "total_pairs": len(image_pairs),
-        "failed_files": [str(path) for path in failed_files],
+        "failed_files": [{"path": str(path), "error": error} for path, error in failed_files],
         "stats": stats,
     }
 
