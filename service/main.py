@@ -4,14 +4,15 @@ Image Compression Application
 Main application for compressing images with configurable parameters.
 """
 
+import json
 import sys
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from threading import Event
 
-from PySide6.QtCore import Qt, QThread, Signal, QStandardPaths
-from PySide6.QtGui import QFont, QIcon
+from PySide6.QtCore import QStandardPaths, Qt, QThread, Signal
+from PySide6.QtGui import QAction, QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -22,15 +23,17 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QStyle,
     QTextEdit,
     QToolButton,
     QVBoxLayout,
-    QWidget, QSizePolicy,
+    QWidget,
 )
 
 from service.compression_profiles import (
@@ -464,8 +467,20 @@ class MainWindow(QMainWindow):
             }
         """)
 
+        self.compare_menu_btn = QToolButton()
+        self.compare_menu_btn.setText("▼")
+        self.compare_menu_btn.setStyleSheet(self.compare_btn.styleSheet())
+        self.compare_menu_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+
+        self.compare_menu = QMenu(self)
+        self.compare_stats_only_action = QAction(tr("Compare Stats Only"), self)
+        self.compare_stats_only_action.triggered.connect(self.show_stats_only_comparison)
+        self.compare_menu.addAction(self.compare_stats_only_action)
+        self.compare_menu_btn.setMenu(self.compare_menu)
+
         button_layout.addWidget(self.compress_btn)
         button_layout.addWidget(self.compare_btn)
+        button_layout.addWidget(self.compare_menu_btn)
 
         # Log section
         self.log_group = QGroupBox(tr("Log"))
@@ -557,6 +572,7 @@ class MainWindow(QMainWindow):
             self.compress_btn.setText(tr("Start Compression"))
             self.compress_btn.setStyleSheet(self.compress_btn_default_style)
         self.compare_btn.setText(tr("Compare Images"))
+        self.compare_stats_only_action.setText(tr("Compare Stats Only"))
         self.log_group.setTitle(tr("Log"))
         self.lang_label.setText(tr("Language:"))
         self.update_button_widths()
@@ -575,6 +591,7 @@ class MainWindow(QMainWindow):
             self.compress_btn.setEnabled(True)
             self.log_message(tr("Selected input directory: {path}").format(path=self.input_directory))
             self.compare_btn.setEnabled(True)
+            self.compare_menu_btn.setEnabled(True)
 
     def reset_settings(self) -> None:
         """Reset all compression settings to their default values."""
@@ -628,12 +645,14 @@ class MainWindow(QMainWindow):
             self.input_directory = path
             self.compress_btn.setEnabled(True)
             self.compare_btn.setEnabled(True)
+            self.compare_menu_btn.setEnabled(True)
             self.output_directory = self.generate_output_directory()
             self.output_dir_edit.setText(str(self.output_directory))
         else:
             self.input_directory = None
             self.compress_btn.setEnabled(False)
             self.compare_btn.setEnabled(False)
+            self.compare_menu_btn.setEnabled(False)
 
     def update_output_directory_from_text(self, text: str) -> None:
         """Update stored output directory when text changes."""
@@ -804,6 +823,7 @@ class MainWindow(QMainWindow):
         self.compress_btn.setText(tr("Abort Compression"))
         self.compress_btn.setStyleSheet(self.abort_btn_style)
         self.compare_btn.setEnabled(False)
+        self.compare_menu_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)  # Indeterminate progress
 
@@ -841,6 +861,7 @@ class MainWindow(QMainWindow):
         self.compress_btn.setStyleSheet(self.compress_btn_default_style)
         self.compress_btn.setEnabled(True)
         self.compare_btn.setEnabled(True)
+        self.compare_menu_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
 
         if cancelled:
@@ -872,6 +893,7 @@ Output directory: {self.output_directory}
         self.compress_btn.setStyleSheet(self.compress_btn_default_style)
         self.compress_btn.setEnabled(True)
         self.compare_btn.setEnabled(True)
+        self.compare_menu_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         self.status_label.setText(tr("Compression failed"))
         self.log_message(tr("Error: {error}").format(error=error_message))
@@ -881,6 +903,37 @@ Output directory: {self.output_directory}
             tr("An error occurred during compression:\n\n{error}").format(error=error_message),
         )
         self.compression_worker = None
+
+    def show_stats_only_comparison(self) -> None:
+        """Show comparison dialog for statistics files only."""
+        file1, _ = QFileDialog.getOpenFileName(
+            self, tr("Select Stats File"), str(self.output_directory or Path.home()), "JSON Files (*.json)"
+        )
+        if not file1:
+            return
+        file2, _ = QFileDialog.getOpenFileName(
+            self, tr("Select Stats File"), str(self.output_directory or Path.home()), "JSON Files (*.json)"
+        )
+        if not file2:
+            return
+        try:
+            data1 = json.loads(Path(file1).read_text())
+            data2 = json.loads(Path(file2).read_text())
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                tr("Error"),
+                tr("Failed to load statistics:\n\n{error}").format(error=e),
+            )
+            return
+        stats1 = data1.get("stats", {})
+        stats2 = data2.get("stats", {})
+        settings1 = data1.get("compression_settings", {})
+        settings2 = data2.get("compression_settings", {})
+        from service.image_comparison_viewer import CompressionStatsDialog
+
+        dialog = CompressionStatsDialog(stats1, stats2, settings1, settings2, self)
+        dialog.exec()
 
     def show_comparison(self) -> None:
         """Show the image comparison window."""
