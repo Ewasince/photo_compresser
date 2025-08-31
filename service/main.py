@@ -477,10 +477,16 @@ class MainWindow(QMainWindow):
         self.compare_stats_only_action.triggered.connect(self.show_stats_only_comparison)
         self.compare_menu.addAction(self.compare_stats_only_action)
         self.compare_menu_btn.setMenu(self.compare_menu)
+        self.compare_menu_btn.setFixedSize(self.compare_btn.sizeHint())
+
+        compare_buttons_layout = QHBoxLayout()
+        compare_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        compare_buttons_layout.setSpacing(5)
+        compare_buttons_layout.addWidget(self.compare_btn)
+        compare_buttons_layout.addWidget(self.compare_menu_btn)
 
         button_layout.addWidget(self.compress_btn)
-        button_layout.addWidget(self.compare_btn)
-        button_layout.addWidget(self.compare_menu_btn)
+        button_layout.addLayout(compare_buttons_layout)
 
         # Log section
         self.log_group = QGroupBox(tr("Log"))
@@ -572,6 +578,7 @@ class MainWindow(QMainWindow):
             self.compress_btn.setText(tr("Start Compression"))
             self.compress_btn.setStyleSheet(self.compress_btn_default_style)
         self.compare_btn.setText(tr("Compare Images"))
+        self.compare_menu_btn.setFixedSize(self.compare_btn.sizeHint())
         self.compare_stats_only_action.setText(tr("Compare Stats Only"))
         self.log_group.setTitle(tr("Log"))
         self.lang_label.setText(tr("Language:"))
