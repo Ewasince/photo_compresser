@@ -446,6 +446,22 @@ class ImageCompressor:
                         logger.info(msg)
                     else:
                         failed_files.append((src_file, error or ""))
+                        if self.copy_unsupported:
+                            target_root = self.unsupported_dir or output_root
+                            used_set = used_names if target_root == output_root else unsupported_used_names
+                            if self.preserve_structure:
+                                rel_path = src_file.relative_to(input_root)
+                                output_file = target_root / rel_path
+                            else:
+                                output_file = target_root / src_file.name
+                                counter = 1
+                                while output_file in used_set or output_file.exists():
+                                    output_file = target_root / f"{src_file.stem}_{counter}{src_file.suffix}"
+                                    counter += 1
+                                used_set.add(output_file)
+                            output_file.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copyfile(src_file, output_file)
+                            copy_times_from_src(src_file, output_file)
                         msg = tr("Failed to compress: {name}").format(name=src_file.name)
                         logger.warning(msg)
                     if log_callback:
@@ -468,6 +484,22 @@ class ImageCompressor:
                     logger.info(msg)
                 else:
                     failed_files.append((src, error or ""))
+                    if self.copy_unsupported:
+                        target_root = self.unsupported_dir or output_root
+                        used_set = used_names if target_root == output_root else unsupported_used_names
+                        if self.preserve_structure:
+                            rel_path = src.relative_to(input_root)
+                            output_file = target_root / rel_path
+                        else:
+                            output_file = target_root / src.name
+                            counter = 1
+                            while output_file in used_set or output_file.exists():
+                                output_file = target_root / f"{src.stem}_{counter}{src.suffix}"
+                                counter += 1
+                            used_set.add(output_file)
+                        output_file.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copyfile(src, output_file)
+                        copy_times_from_src(src, output_file)
                     msg = tr("Failed to compress: {name}").format(name=src.name)
                     logger.warning(msg)
                 if log_callback:
