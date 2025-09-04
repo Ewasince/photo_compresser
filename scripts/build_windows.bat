@@ -11,6 +11,7 @@ python -m nuitka service\main.py ^
     --windows-console-mode=disable ^
     --include-qt-plugins=sensible,styles ^
     --windows-icon-from-ico=resources\bp.ico ^
+    --include-data-files=resources\bp.ico=resources\bp.ico ^
     --output-dir=dist
 
 move "dist\main.exe" "dist\photo_compresser.exe"

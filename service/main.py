@@ -973,11 +973,18 @@ Output directory: {self.output_directory}
         self.log_text.append(f"[{timestamp}] {message}")
 
 
+def _resource_root() -> Path:
+    """Return base directory for bundled resource files."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.argv[0]).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
 def main() -> None:
     """Main application entry point."""
     app = QApplication(sys.argv)
 
-    icon_path = Path(__file__).resolve().parent.parent / "resources" / "bp.ico"
+    icon_path = _resource_root() / "resources" / "bp.ico"
     app.setWindowIcon(QIcon(str(icon_path)))  # общий значок для всех окон
 
     # Set application style
