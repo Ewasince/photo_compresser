@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from service import resources_rc  # noqa: F401  # pylint: disable=unused-import
 from service.compression_profiles import (
     CompressionProfile,
     load_profiles,
@@ -973,20 +974,10 @@ Output directory: {self.output_directory}
         self.log_text.append(f"[{timestamp}] {message}")
 
 
-def _resource_root() -> Path:
-    """Return base directory for bundled resource files."""
-    base = getattr(sys, "_MEIPASS", None)
-    if base:
-        return Path(base)
-    return Path(__file__).resolve().parent.parent
-
-
 def main() -> None:
     """Main application entry point."""
     app = QApplication(sys.argv)
-
-    icon_path = _resource_root() / "resources" / "bp.ico"
-    app.setWindowIcon(QIcon(str(icon_path)))  # общий значок для всех окон
+    app.setWindowIcon(QIcon(":/bp.ico"))  # общий значок для всех окон
 
     # Set application style
     app.setStyle("Fusion")
