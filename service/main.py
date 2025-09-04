@@ -975,8 +975,9 @@ Output directory: {self.output_directory}
 
 def _resource_root() -> Path:
     """Return base directory for bundled resource files."""
-    if getattr(sys, "frozen", False):
-        return Path(sys.argv[0]).resolve().parent
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        return Path(base)
     return Path(__file__).resolve().parent.parent
 
 
