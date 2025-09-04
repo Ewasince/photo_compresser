@@ -285,6 +285,32 @@ class ImageCompressor:
             return ".avif"
         return ".jpg"  # Default fallback
 
+    def _copy_to_unsupported(
+        self,
+        src: Path,
+        input_root: Path,
+        output_root: Path,
+        used_names: set[Path],
+        unsupported_used_names: set[Path],
+    ) -> Path:
+        """Copy ``src`` to the unsupported directory preserving timestamps."""
+        target_root = self.unsupported_dir or output_root
+        used_set = used_names if target_root == output_root else unsupported_used_names
+        if self.preserve_structure:
+            rel_path = src.relative_to(input_root)
+            output_file = target_root / rel_path
+        else:
+            output_file = target_root / src.name
+            counter = 1
+            while output_file in used_set or output_file.exists():
+                output_file = target_root / f"{src.stem}_{counter}{src.suffix}"
+                counter += 1
+            used_set.add(output_file)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, output_file)
+        copy_times_from_src(src, output_file)
+        return output_file
+
     def process_directory(
         self,
         input_root: Path,
@@ -367,22 +393,13 @@ class ImageCompressor:
                 tasks.append(file_path)
             else:
                 if self.copy_unsupported:
-                    target_root = self.unsupported_dir or output_root
-                    used_set = used_names if target_root == output_root else unsupported_used_names
-                    if self.preserve_structure:
-                        rel_path = file_path.relative_to(input_root)
-                        output_file = target_root / rel_path
-                    else:
-                        output_file = target_root / file_path.name
-                        counter = 1
-                        while output_file in used_set or output_file.exists():
-                            output_file = target_root / f"{file_path.stem}_{counter}{file_path.suffix}"
-                            counter += 1
-                        used_set.add(output_file)
-
-                    output_file.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(file_path, output_file)
-                    copy_times_from_src(file_path, output_file)
+                    self._copy_to_unsupported(
+                        file_path,
+                        input_root,
+                        output_root,
+                        used_names,
+                        unsupported_used_names,
+                    )
                     msg = tr("Copied file: {name}").format(name=file_path.name)
                 else:
                     msg = tr("Skipped unsupported file: {name}").format(name=file_path.name)
@@ -447,21 +464,13 @@ class ImageCompressor:
                     else:
                         failed_files.append((src_file, error or ""))
                         if self.copy_unsupported:
-                            target_root = self.unsupported_dir or output_root
-                            used_set = used_names if target_root == output_root else unsupported_used_names
-                            if self.preserve_structure:
-                                rel_path = src_file.relative_to(input_root)
-                                output_file = target_root / rel_path
-                            else:
-                                output_file = target_root / src_file.name
-                                counter = 1
-                                while output_file in used_set or output_file.exists():
-                                    output_file = target_root / f"{src_file.stem}_{counter}{src_file.suffix}"
-                                    counter += 1
-                                used_set.add(output_file)
-                            output_file.parent.mkdir(parents=True, exist_ok=True)
-                            shutil.copyfile(src_file, output_file)
-                            copy_times_from_src(src_file, output_file)
+                            self._copy_to_unsupported(
+                                src_file,
+                                input_root,
+                                output_root,
+                                used_names,
+                                unsupported_used_names,
+                            )
                         msg = tr("Failed to compress: {name}").format(name=src_file.name)
                         logger.warning(msg)
                     if log_callback:
@@ -485,21 +494,13 @@ class ImageCompressor:
                 else:
                     failed_files.append((src, error or ""))
                     if self.copy_unsupported:
-                        target_root = self.unsupported_dir or output_root
-                        used_set = used_names if target_root == output_root else unsupported_used_names
-                        if self.preserve_structure:
-                            rel_path = src.relative_to(input_root)
-                            output_file = target_root / rel_path
-                        else:
-                            output_file = target_root / src.name
-                            counter = 1
-                            while output_file in used_set or output_file.exists():
-                                output_file = target_root / f"{src.stem}_{counter}{src.suffix}"
-                                counter += 1
-                            used_set.add(output_file)
-                        output_file.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copyfile(src, output_file)
-                        copy_times_from_src(src, output_file)
+                        self._copy_to_unsupported(
+                            src,
+                            input_root,
+                            output_root,
+                            used_names,
+                            unsupported_used_names,
+                        )
                     msg = tr("Failed to compress: {name}").format(name=src.name)
                     logger.warning(msg)
                 if log_callback:
