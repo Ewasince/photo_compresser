@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from service import resources_rc  # noqa: F401  # pylint: disable=unused-import
 from service.compression_profiles import (
     CompressionProfile,
     load_profiles,
@@ -976,9 +977,7 @@ Output directory: {self.output_directory}
 def main() -> None:
     """Main application entry point."""
     app = QApplication(sys.argv)
-
-    icon_path = Path(__file__).resolve().parent.parent / "resources" / "bp.ico"
-    app.setWindowIcon(QIcon(str(icon_path)))  # общий значок для всех окон
+    app.setWindowIcon(QIcon(":/bp.ico"))  # общий значок для всех окон
 
     # Set application style
     app.setStyle("Fusion")

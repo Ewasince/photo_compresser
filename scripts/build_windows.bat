@@ -5,6 +5,8 @@ REM Change to repository root
 
 call ".venv\Scripts\activate.bat"
 
+pyside6-rcc resources\resources.qrc -o service\resources_rc.py
+
 python -m nuitka service\main.py ^
     --onefile ^
     --enable-plugin=pyside6 ^
