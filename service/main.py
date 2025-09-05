@@ -52,6 +52,7 @@ from service.image_compression import (
 from service.parameters_defaults import GLOBAL_DEFAULTS
 from service.profile_panel import ProfilePanel
 from service.translator import LANGUAGES, get_language, set_language, tr
+from service.video_encoding import enqueue_videos
 
 
 class CompressionWorker(QThread):
@@ -93,6 +94,7 @@ class CompressionWorker(QThread):
                 compressed_paths,
                 failed_files,
                 profile_results,
+                video_files,
             ) = self.compressor.process_directory(
                 self.input_dir,
                 self.output_dir,
@@ -133,6 +135,18 @@ class CompressionWorker(QThread):
                     failed_files,
                     stats["conversion_time"],
                 )
+
+            if video_files and not self._stop_event.is_set():
+                preset_dir = Path(self.compression_settings.get("video_preset_dir", ""))
+                jobs = []
+                for src in video_files:
+                    if self.compressor.preserve_structure:
+                        rel = src.relative_to(self.input_dir)
+                        dst = self.output_dir / rel
+                    else:
+                        dst = self.output_dir / src.name
+                    jobs.append((src, dst))
+                enqueue_videos(jobs, preset_dir)
 
             if self._stop_event.is_set():
                 self.cancelled = True
@@ -800,6 +814,8 @@ class MainWindow(QMainWindow):
         )
         compressor.apply_profile(default_profile)
 
+        video_preset_dir = Path("resources/video_presets")
+
         compression_settings = {
             "input_directory": str(self.input_directory),
             "output_directory": str(self.output_directory),
@@ -808,6 +824,7 @@ class MainWindow(QMainWindow):
             "copy_unsupported": copy_unsupported,
             "copy_unsupported_to_dir": copy_unsupported_to_dir,
             "unsupported_dir": str(unsupported_dir) if unsupported_dir else "",
+            "video_preset_dir": str(video_preset_dir),
         }
 
         # Create and start worker thread

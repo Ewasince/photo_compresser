@@ -18,7 +18,7 @@ def test_failed_file_logging(tmp_path: Path) -> None:
     bad_file.write_text("not an image")
     output_dir = tmp_path / "out"
     compressor = ImageCompressor()
-    total, compressed, _, failed, _ = compressor.process_directory(input_dir, output_dir)
+    total, compressed, _, failed, _, _ = compressor.process_directory(input_dir, output_dir)
     assert total == 1
     assert compressed == 0
     assert len(failed) == 1

@@ -16,7 +16,7 @@ from PIL import Image
 from pillow_heif import register_heif_opener
 
 from service.compression_profiles import CompressionProfile, select_profile
-from service.constants import SUPPORTED_EXTENSIONS
+from service.constants import SUPPORTED_EXTENSIONS, SUPPORTED_VIDEO_EXTENSIONS
 from service.file_utils import copy_times_from_src
 from service.save_functions import save_avif, save_jpeg, save_webp
 from service.translator import tr
@@ -327,6 +327,7 @@ class ImageCompressor:
         list[Path],
         list[tuple[Path, str]],
         list[tuple[Path, Path, str, dict[str, dict[str, bool]]]],
+        list[Path],
     ]:
         """
         Process a directory recursively, compressing all supported images.
@@ -337,10 +338,12 @@ class ImageCompressor:
 
         Returns:
             Tuple of ``(total_files, compressed_files, compressed_paths,
-            failed_files, profile_results)``. ``failed_files`` contains tuples
-            of image path and the associated error message. ``profile_results``
-            contains tuples ``(src_path, output_path, profile_name,
-            condition_results)`` for successfully compressed images.
+            failed_files, profile_results, video_files)``. ``failed_files``
+            contains tuples of image path and the associated error message.
+            ``profile_results`` contains tuples ``(src_path, output_path,
+            profile_name, condition_results)`` for successfully compressed
+            images. ``video_files`` is a list of video paths found during
+            scanning that should be processed separately.
         """
         total_files = sum(1 for f in input_root.rglob("*") if f.is_file() and f.suffix.lower() in SUPPORTED_EXTENSIONS)
         processed_files = 0
@@ -348,6 +351,7 @@ class ImageCompressor:
         compressed_paths: list[Path] = []
         failed_files: list[tuple[Path, str]] = []
         profile_results: list[tuple[Path, Path, str, dict[str, dict[str, bool]]]] = []
+        video_files: list[Path] = []
 
         if progress_callback:
             progress_callback(0, total_files)
@@ -389,8 +393,15 @@ class ImageCompressor:
             if not file_path.is_file():
                 continue
 
-            if file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
+            suffix = file_path.suffix.lower()
+            if suffix in SUPPORTED_EXTENSIONS:
                 tasks.append(file_path)
+            elif suffix in SUPPORTED_VIDEO_EXTENSIONS:
+                video_files.append(file_path)
+                msg = tr("Queued video: {name}").format(name=file_path.name)
+                logger.info(msg)
+                if log_callback:
+                    log_callback(msg)
             else:
                 if self.copy_unsupported:
                     self._copy_to_unsupported(
@@ -515,7 +526,14 @@ class ImageCompressor:
         logger.info(msg)
         if status_callback:
             status_callback(msg)
-        return total_files, compressed_files, compressed_paths, failed_files, profile_results
+        return (
+            total_files,
+            compressed_files,
+            compressed_paths,
+            failed_files,
+            profile_results,
+            video_files,
+        )
 
     def get_compression_stats(
         self,
