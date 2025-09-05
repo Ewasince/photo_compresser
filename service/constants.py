@@ -15,3 +15,14 @@ SUPPORTED_EXTENSIONS = {
     ".pgm",
     ".pbm",
 }
+
+SUPPORTED_VIDEO_EXTENSIONS = {
+    ".mp4",
+    ".mov",
+    ".avi",
+    ".mkv",
+    ".webm",
+    ".mpg",
+    ".mpeg",
+    ".m4v",
+}
